@@ -3,7 +3,7 @@
    All the money logic lives in app.js.
    ============================================================ */
 import {
-  PEOPLE, BILLS, BILLS_FILE, PAYMENTS, BILL_PAYERS, KINDS,
+  PEOPLE, BILLS, BILLS_FILE, PAYMENTS, BILL_PAYERS, OWED_LEAD_DAYS, KINDS,
   draft, setDraft, mergeBills, DRAFT_KEY, saveDraft,
   payDraft, setPayDraft, savePayDraft,
   money, r2, monthLabel, dateLabel, TODAY,
@@ -153,12 +153,34 @@ export function render() {
     },
   ];
 
+  /* The pay window opens OWED_LEAD_DAYS before the due date. Once the
+     whole-house payment is logged for this cycle, the button hides
+     until the next window opens. */
+  const cycleStart = nextRow ? new Date(nextRow.dueDate) : null;
+  if (cycleStart) cycleStart.setDate(cycleStart.getDate() - OWED_LEAD_DAYS);
+  const windowOpen = !!nextRow?.isDue;
+  const paidThisCycle = (g) =>
+    cycleStart && [...PAYMENTS, ...payDraft].some((p) =>
+      p.covers && p.to === g.to && new Date(p.date + "T00:00:00") >= cycleStart);
+
   /* each bill card only shows for the person who fronts it */
   el("pay-actions").innerHTML = groups
     .filter((g) => !ME || g.payer === ME)
     .map((g) => {
       const house = r2(PEOPLE.reduce((s, p) => s + g.per[p], 0));
       const isMine = g.payer === who;
+      const paid = paidThisCycle(g);
+      const action = !isMine
+        ? `<div class="act-to" style="margin-top:12px">${g.payer} fronts this bill</div>`
+        : paid
+        ? `<div class="act-btns"><button class="btn done" disabled>Paid ✓ — back next month</button></div>`
+        : windowOpen
+        ? `<div class="act-btns">
+            ${payButton({ label: "Pay for the whole house", amount: house, by: g.payer, to: g.to,
+                          note: `${g.title} — whole house`, covers: g.per })}
+           </div>`
+        : `<div class="act-to" style="margin-top:12px">Nothing to pay yet — opens ${
+            cycleStart ? dateLabel(cycleStart) : "next cycle"}</div>`;
       return `<div class="act">
         <div class="act-top">
           <div>
@@ -169,10 +191,7 @@ export function render() {
         </div>
         <div class="act-split">${PEOPLE.map((p) =>
           `<span class="chip">${p} ${money(g.per[p])}</span>`).join("")}</div>
-        ${isMine ? `<div class="act-btns">
-          ${payButton({ label: "Pay for the whole house", amount: house, by: g.payer, to: g.to,
-                        note: `${g.title} — whole house`, covers: g.per })}
-        </div>` : `<div class="act-to" style="margin-top:12px">${g.payer} fronts this bill</div>`}
+        ${action}
       </div>`;
     }).join("") ||
     `<div class="act">

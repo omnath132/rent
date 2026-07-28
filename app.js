@@ -235,7 +235,7 @@ function computeBalances(schedule) {
 /* ---------- shared with ui.js ---------- */
 export const KINDS = ["wifi", "gas", "electric", "water"];
 export {
-  PEOPLE, BILLS, BILLS_FILE, PAYMENTS, BILL_PAYERS,
+  PEOPLE, BILLS, BILLS_FILE, PAYMENTS, BILL_PAYERS, OWED_LEAD_DAYS,
   draft, DRAFT_KEY, mergeBills, saveDraft,
   payDraft, savePayDraft,
   money, r2, monthLabel, dateLabel, TODAY,
