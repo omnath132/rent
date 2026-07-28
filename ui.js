@@ -3,18 +3,19 @@
    All the money logic lives in app.js.
    ============================================================ */
 import {
-  PEOPLE, BILLS, BILLS_FILE, PAYMENTS, KINDS,
-  draft, setDraft, mergeBills, DRAFT_KEY,
+  PEOPLE, BILLS, BILLS_FILE, PAYMENTS, BILL_PAYERS, KINDS,
+  draft, setDraft, mergeBills, DRAFT_KEY, saveDraft,
   payDraft, setPayDraft, savePayDraft,
   money, r2, monthLabel, dateLabel, TODAY,
   utilitiesFor, buildSchedule, computeBalances, isPerson,
+  initStore, storeMode,
 } from "./app.js";
 
 const el = (id) => document.getElementById(id);
 
 /* ---------- session snapshot: what things looked like on page load ---------- */
 const clone = (x) => JSON.parse(JSON.stringify(x));
-const SESSION0 = { draft: clone(draft), pay: clone(payDraft) };
+let SESSION0 = { draft: {}, pay: [] };
 const sessionDirty = () =>
   JSON.stringify(draft) !== JSON.stringify(SESSION0.draft) ||
   JSON.stringify(payDraft) !== JSON.stringify(SESSION0.pay);
@@ -133,7 +134,7 @@ export function render() {
 
   const groups = [
     {
-      title: "Rent + water", to: "Landlord",
+      title: "Rent + water", to: "Landlord", payer: BILL_PAYERS.rentWater,
       sub: nextRow?.rentMonth
         ? `${monthLabel(nextRow.rentMonth)} rent${
             nextRow.utilMonth ? ` · ${monthLabel(nextRow.utilMonth)} water` : ""}`
@@ -141,32 +142,39 @@ export function render() {
       per: Object.fromEntries(PEOPLE.map((p) => [p, r2(per[p].rent + per[p].water)])),
     },
     {
-      title: "Other utilities", to: "Utility co",
+      title: "Other utilities", to: "Utility co", payer: BILL_PAYERS.otherUtilities,
       sub: `wifi · gas · electric${nextRow?.utilMonth ? ` — ${monthLabel(nextRow.utilMonth)}` : ""}`,
       per: Object.fromEntries(PEOPLE.map((p) => [p, r2(per[p].other)])),
     },
   ];
 
-  el("pay-actions").innerHTML = groups.map((g) => {
-    const house = r2(PEOPLE.reduce((s, p) => s + g.per[p], 0));
-    return `<div class="act">
-      <div class="act-top">
-        <div>
-          <div class="act-title">${g.title}</div>
-          <div class="act-to">to ${g.to} · ${g.sub}</div>
+  /* each bill card only shows for the person who fronts it */
+  el("pay-actions").innerHTML = groups
+    .filter((g) => !ME || g.payer === ME)
+    .map((g) => {
+      const house = r2(PEOPLE.reduce((s, p) => s + g.per[p], 0));
+      const isMine = g.payer === who;
+      return `<div class="act">
+        <div class="act-top">
+          <div>
+            <div class="act-title">${g.title}</div>
+            <div class="act-to">to ${g.to} · ${g.sub}</div>
+          </div>
+          <div class="act-amt num">${money(house)}<i>whole house</i></div>
         </div>
-        <div class="act-amt num">${money(house)}<i>whole house</i></div>
-      </div>
-      <div class="act-split">${PEOPLE.map((p) =>
-        `<span class="chip">${p} ${money(g.per[p])}</span>`).join("")}</div>
-      <div class="act-btns">
-        ${payButton({ label: "Pay for the whole house", amount: house, by: who, to: g.to,
-                      note: `${g.title} — whole house`, covers: g.per })}
-        ${payButton({ label: "Just my share", amount: g.per[who], by: who, to: g.to,
-                      note: `${g.title} — ${who}'s share`, cls: "sec" })}
-      </div>
-    </div>`;
-  }).join("");
+        <div class="act-split">${PEOPLE.map((p) =>
+          `<span class="chip">${p} ${money(g.per[p])}</span>`).join("")}</div>
+        ${isMine ? `<div class="act-btns">
+          ${payButton({ label: "Pay for the whole house", amount: house, by: g.payer, to: g.to,
+                        note: `${g.title} — whole house`, covers: g.per })}
+        </div>` : `<div class="act-to" style="margin-top:12px">${g.payer} fronts this bill</div>`}
+      </div>`;
+    }).join("") ||
+    `<div class="act">
+       <div class="act-title">No bills for you to front</div>
+       <div class="act-to">${groups.map((g) => `${g.payer} pays ${g.title.toLowerCase()}`).join(" · ")}
+         — your part shows under Settle up once they've paid</div>
+     </div>`;
   wirePayButtons(el("pay-actions"));
 
   /* ---- settle up with roommates ---- */
@@ -194,12 +202,14 @@ export function render() {
       : "");
   wirePayButtons(el("settle-actions"));
 
-  el("pay-bar").className = payDraft.length ? "draftbar on" : "draftbar";
+  el("pay-bar").className =
+    storeMode() === "local" && payDraft.length ? "draftbar on" : "draftbar";
 
   /* ---- bills editor ---- */
   const months = Object.keys(BILLS).sort();
   const openNow = new Set([...document.querySelectorAll(".bill[open]")].map((d) => d.dataset.mk));
-  el("draft-bar").className = Object.keys(draft).length ? "draftbar on" : "draftbar";
+  el("draft-bar").className =
+    storeMode() === "local" && Object.keys(draft).length ? "draftbar on" : "draftbar";
 
   el("bills").innerHTML = months.map((mk) => {
     const u = utilitiesFor(mk);
@@ -234,7 +244,7 @@ export function render() {
       const original = (BILLS_FILE[mk] || {})[kind] ?? null;
       if (draft[mk][kind] === original) delete draft[mk][kind];
       if (!Object.keys(draft[mk]).length) delete draft[mk];
-      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      saveDraft();
       mergeBills();
       render();
     };
@@ -255,8 +265,8 @@ export function render() {
   el("log").innerHTML =
     payDraft.map((p, i) => `
       <div class="prow new">
-        <div><b>${p.by}</b> → ${isPerson(p.to) ? p.to : p.to.toLowerCase()}<i>${
-          p.note} · not in data.js yet</i></div>
+        <div><b>${p.by}</b> → ${isPerson(p.to) ? p.to : p.to.toLowerCase()}<i>${p.note}${
+          storeMode() === "local" ? " · not in data.js yet" : ` · ${p.date}`}</i></div>
         <div class="pamt">${money(p.amount)}<button class="undo" data-i="${i}">undo</button></div>
       </div>`).reverse().join("") +
     [...PAYMENTS].reverse().map((p) => `
@@ -313,7 +323,7 @@ el("copy-pay").onclick = (e) => copyText(e.currentTarget, paySnippet());
 el("reset-draft").onclick = () => {
   if (!confirm("Discard your local bill edits?")) return;
   setDraft({});
-  localStorage.removeItem(DRAFT_KEY);
+  saveDraft();
   mergeBills();
   render();
 };
@@ -339,7 +349,7 @@ addEventListener("scroll",
 el("undo-btn").onclick = () => {
   if (!confirm("Undo all bill edits and logged payments from this visit?\n\nEverything goes back to how it was when you opened the page.")) return;
   setDraft(clone(SESSION0.draft));
-  localStorage.setItem(DRAFT_KEY, JSON.stringify(SESSION0.draft));
+  saveDraft();
   mergeBills();
   setPayDraft(clone(SESSION0.pay));
   savePayDraft();
@@ -368,4 +378,13 @@ el("theme-btn").onclick = () => {
 };
 themeIcon();
 
-render();
+/* ---------- boot: load shared state (if the server store exists), then render ---------- */
+initStore().then(() => {
+  SESSION0 = { draft: clone(draft), pay: clone(payDraft) };
+  render();
+});
+
+/* when the tab comes back into focus, pull the latest shared state */
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && storeMode() === "server") initStore().then(render);
+});

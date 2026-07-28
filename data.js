@@ -23,6 +23,13 @@ export const OWED_LEAD_DAYS = 7;
    So on the 28th of July you pay AUGUST rent + JULY utilities. */
 export const UTILITY_MONTHS_BEHIND_RENT = 1;
 
+/* Who fronts each bill for the whole house. Their Pay tab gets the
+   "pay for the whole house" card; everyone else just settles up with them. */
+export const BILL_PAYERS = {
+  rentWater: "Simon",       // rent + water → landlord
+  otherUtilities: "Aidan",  // wifi, gas, electric → utility co
+};
+
 /* ------------------------------------------------------------
    UTILITY BILLS — one entry per month the bill COVERS.
    Leave a bill out (or null) if it hasn't arrived yet.

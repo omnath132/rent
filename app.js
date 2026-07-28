@@ -1,6 +1,7 @@
 import {
   PEOPLE, RENT, RENT_FIRST_MONTH, RENT_LAST_MONTH, DUE_DAY, OWED_LEAD_DAYS,
   UTILITY_MONTHS_BEHIND_RENT, BILLS as BILLS_FILE, WATER_FIXED_MONTHS, PAYMENTS,
+  BILL_PAYERS,
 } from "./data.js";
 
 /* Local unsaved edits to the bills, layered on top of data.js.
@@ -16,11 +17,56 @@ const mergeBills = () => {
 };
 mergeBills();
 
-/* Payments logged with the buttons, until they're pasted into data.js. */
+/* Payments logged with the buttons. */
 const PAY_KEY = "rent-tracker-pay-draft";
 let payDraft = (() => { try { return JSON.parse(localStorage.getItem(PAY_KEY)) || []; } catch { return []; } })();
-const savePayDraft = () => localStorage.setItem(PAY_KEY, JSON.stringify(payDraft));
 const allPayments = () => [...PAYMENTS, ...payDraft];
+
+/* ---------- storage: shared server if available, this device if not ----------
+   When the site runs on Vercel with the Redis store configured, /api/data
+   holds ONE shared state (bill edits + logged payments) for the whole house —
+   no more pasting into data.js. Anywhere else (local preview, store missing)
+   it falls back to per-device localStorage exactly like before.            */
+let MODE = "local";
+export const storeMode = () => MODE;
+
+let pushTimer = null;
+function pushServer() {
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(() => {
+    pushTimer = null;
+    fetch("/api/data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bills: draft, payments: payDraft }),
+    }).catch(() => {});
+  }, 300);
+}
+
+const saveDraft = () => {
+  if (MODE === "server") pushServer();
+  else localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+};
+const savePayDraft = () => {
+  if (MODE === "server") pushServer();
+  else localStorage.setItem(PAY_KEY, JSON.stringify(payDraft));
+};
+
+export async function initStore() {
+  try {
+    const r = await fetch("/api/data", { signal: AbortSignal.timeout(4000) });
+    if (r.ok) {
+      const d = await r.json();
+      if (d && typeof d.bills === "object" && d.bills !== null && Array.isArray(d.payments)) {
+        MODE = "server";
+        draft = d.bills;
+        payDraft = d.payments;
+        mergeBills();
+      }
+    }
+  } catch { /* offline or no API — stay local */ }
+  return MODE;
+}
 
 /* ---------- tiny helpers ---------- */
 const money = (n) =>
@@ -189,8 +235,8 @@ function computeBalances(schedule) {
 /* ---------- shared with ui.js ---------- */
 export const KINDS = ["wifi", "gas", "electric", "water"];
 export {
-  PEOPLE, BILLS, BILLS_FILE, PAYMENTS,
-  draft, DRAFT_KEY, mergeBills,
+  PEOPLE, BILLS, BILLS_FILE, PAYMENTS, BILL_PAYERS,
+  draft, DRAFT_KEY, mergeBills, saveDraft,
   payDraft, savePayDraft,
   money, r2, monthLabel, dateLabel, TODAY,
   utilitiesFor, buildSchedule, computeBalances, isPerson,

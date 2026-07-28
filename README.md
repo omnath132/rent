@@ -17,13 +17,30 @@ step, no database, nothing to install.
 - Buttons and the bill editor save to *your device* first, then give you a
   **"Copy for data.js"** snippet to paste into the repo so everyone sees it.
 
+## Shared live data (one-time, ~2 minutes)
+
+With this on, edits and payments save instantly for the whole house — no more
+pasting into `data.js`:
+
+1. Vercel dashboard → your project → **Storage** tab → **Create Database** →
+   pick **Upstash Redis** (free plan) → accept the defaults.
+2. Redeploy (or just push anything).
+
+That's it — the env vars are injected automatically and `/api/data` starts
+working. Bill edits and pay-button taps now sync for everyone, and the site
+refreshes itself when you come back to the tab. Without the store, the site
+still works — it just falls back to per-device saving with the
+"Copy for data.js" flow.
+
+`data.js` stays the baseline (rents, lease dates, who fronts which bill);
+the shared store holds bill edits and the payments log on top of it.
+
 ## Updating the numbers (monthly routine)
 
-1. Bills arrive → open the **Bills** tab, type them in (or edit `BILLS` in
-   `data.js` directly).
-2. People pay → tap the pay buttons, or add lines to `PAYMENTS` in `data.js`.
-3. If you used the in-app editors, tap **Copy for data.js**, paste over the matching
-   block in `data.js`, commit, push. Done.
+1. Bills arrive → open the **Bills** tab, type them in.
+2. People pay → tap the pay buttons.
+3. That's all, if shared storage is on. Otherwise tap **Copy for data.js**,
+   paste over the matching block in `data.js`, commit, push.
 
 ## Deploy to Vercel (one-time, ~3 minutes)
 
