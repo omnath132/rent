@@ -81,6 +81,11 @@ export function render() {
   /* undo-this-visit button */
   el("undo-btn").classList.toggle("on", sessionDirty());
 
+  /* footer note reflects how changes are being saved */
+  el("mode-note").innerHTML = storeMode() === "server"
+    ? "✓ Changes save automatically and everyone sees them. Rents and lease dates live in <code>data.js</code>."
+    : "Changes are saved on this device only. To share them, add the free Redis store on Vercel (Storage tab) — or paste edits into <code>data.js</code> and push.";
+
   /* identity chip */
   el("who-initial").textContent = ME ? ME[0] : "?";
   el("who-name").textContent = ME || "Who are you?";
