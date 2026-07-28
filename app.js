@@ -54,14 +54,21 @@ const savePayDraft = () => {
 
 export async function initStore() {
   try {
-    const r = await fetch("/api/data", { signal: AbortSignal.timeout(4000) });
+    /* cache-busted + no-store so a reload always gets the latest state */
+    const r = await fetch(`/api/data?t=${Date.now()}`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(4000),
+    });
     if (r.ok) {
       const d = await r.json();
       if (d && typeof d.bills === "object" && d.bills !== null && Array.isArray(d.payments)) {
         MODE = "server";
-        draft = d.bills;
-        payDraft = d.payments;
-        mergeBills();
+        /* don't clobber a local change that hasn't been pushed yet */
+        if (pushTimer === null) {
+          draft = d.bills;
+          payDraft = d.payments;
+          mergeBills();
+        }
       }
     }
   } catch { /* offline or no API — stay local */ }

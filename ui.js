@@ -465,7 +465,14 @@ initStore().then(() => {
   render();
 });
 
-/* when the tab comes back into focus, pull the latest shared state */
-document.addEventListener("visibilitychange", () => {
-  if (!document.hidden && storeMode() === "server") initStore().then(render);
-});
+/* keep devices in sync: refetch when the tab regains focus, when the page is
+   restored from the back/app-switcher cache, and every 30s while visible */
+const resync = () => {
+  if (storeMode() !== "server" || document.hidden) return;
+  /* don't yank the keyboard away mid-edit */
+  if (document.activeElement?.tagName === "INPUT") return;
+  initStore().then(render);
+};
+document.addEventListener("visibilitychange", resync);
+window.addEventListener("pageshow", (e) => { if (e.persisted) resync(); });
+setInterval(resync, 30_000);
