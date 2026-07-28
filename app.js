@@ -204,15 +204,30 @@ function computeBalances(schedule) {
     }
   }
 
-  /* net pairwise moves */
-  const moves = [];
-  for (let i = 0; i < PEOPLE.length; i++) {
-    for (let j = i + 1; j < PEOPLE.length; j++) {
-      const a = PEOPLE[i], b = PEOPLE[j];
-      const net = r2((iou[a]?.[b] || 0) - (iou[b]?.[a] || 0));
-      if (net > 0.005) moves.push({ from: a, to: b, amt: net });
-      else if (net < -0.005) moves.push({ from: b, to: a, amt: -net });
+  /* Smart settle (min cash flow): net out each person's roommate ledger,
+     then match the biggest debtor to the biggest creditor. Chains collapse —
+     if A owes B and B owes C, A just pays C and B pays a reduced amount. */
+  const net = Object.fromEntries(PEOPLE.map((p) => [p, 0]));  // + is owed, − owes
+  for (const a of PEOPLE) {
+    for (const b of PEOPLE) {
+      const amt = iou[a]?.[b] || 0;
+      net[a] -= amt;
+      net[b] += amt;
     }
+  }
+  const debtors = PEOPLE.filter((p) => net[p] < -0.005)
+    .map((p) => ({ p, amt: -net[p] })).sort((x, y) => y.amt - x.amt);
+  const creditors = PEOPLE.filter((p) => net[p] > 0.005)
+    .map((p) => ({ p, amt: net[p] })).sort((x, y) => y.amt - x.amt);
+  const moves = [];
+  let di = 0, ci = 0;
+  while (di < debtors.length && ci < creditors.length) {
+    const pay = r2(Math.min(debtors[di].amt, creditors[ci].amt));
+    if (pay > 0.005) moves.push({ from: debtors[di].p, to: creditors[ci].p, amt: pay });
+    debtors[di].amt = r2(debtors[di].amt - pay);
+    creditors[ci].amt = r2(creditors[ci].amt - pay);
+    if (debtors[di].amt <= 0.005) di++;
+    if (creditors[ci].amt <= 0.005) ci++;
   }
 
   const balances = PEOPLE.map((p) => {
