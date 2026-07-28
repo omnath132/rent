@@ -171,6 +171,8 @@ h2.tight{margin-top:18px}
 .btn:active:not(:disabled){transform:scale(.975)}
 .btn:disabled{opacity:.4;cursor:default}
 .btn.done{background:var(--green);color:#fff;justify-content:center}
+.paid-pair{grid-template-columns:1fr auto}
+.paid-pair .undo-house{justify-content:center;min-width:84px}
 
 /* ---------- bills editor ---------- */
 .bill{border-bottom:1px solid var(--line)}
@@ -264,6 +266,17 @@ h2.tight{margin-top:18px}
 .note{font-size:12px;color:var(--dim);margin:16px 4px 0;line-height:1.55}
 .credit{font-size:12px;color:var(--dim);text-align:center;margin:34px 0 0;
   letter-spacing:.02em;opacity:.8}
+
+/* plain admin panel — deliberately unstyled-looking */
+.admin{margin-top:22px;font-size:13px;color:var(--dim)}
+.admin summary{cursor:pointer;text-align:center;opacity:.7}
+.admin > div{margin:10px 0;border:1px dashed var(--line);border-radius:8px;padding:6px 10px}
+.admin .arow{display:flex;justify-content:space-between;gap:10px;align-items:center;
+  padding:5px 0;border-bottom:1px dashed var(--line);font-variant-numeric:tabular-nums}
+.admin .arow:last-child{border-bottom:0}
+.admin .arow.locked{opacity:.55}
+.admin button{border:1px solid var(--line);background:transparent;color:var(--red);
+  font:inherit;font-size:12px;padding:4px 10px;border-radius:7px;cursor:pointer;margin-right:6px}
 code{background:color-mix(in srgb,var(--dim) 18%,transparent);padding:1px 5px;
   border-radius:5px;font-size:11px}
 

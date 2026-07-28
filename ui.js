@@ -159,9 +159,12 @@ export function render() {
   const cycleStart = nextRow ? new Date(nextRow.dueDate) : null;
   if (cycleStart) cycleStart.setDate(cycleStart.getDate() - OWED_LEAD_DAYS);
   const windowOpen = !!nextRow?.isDue;
+  const isCyclePay = (g) => (p) =>
+    p.covers && p.to === g.to && new Date(p.date + "T00:00:00") >= cycleStart;
   const paidThisCycle = (g) =>
-    cycleStart && [...PAYMENTS, ...payDraft].some((p) =>
-      p.covers && p.to === g.to && new Date(p.date + "T00:00:00") >= cycleStart);
+    cycleStart && [...PAYMENTS, ...payDraft].some(isCyclePay(g));
+  /* index in payDraft of this cycle's whole-house payment (−1 if it's baked into data.js) */
+  const cyclePayIndex = (g) => (cycleStart ? payDraft.findIndex(isCyclePay(g)) : -1);
 
   /* each bill card only shows for the person who fronts it */
   el("pay-actions").innerHTML = groups
@@ -173,7 +176,12 @@ export function render() {
       const action = !isMine
         ? `<div class="act-to" style="margin-top:12px">${g.payer} fronts this bill</div>`
         : paid
-        ? `<div class="act-btns"><button class="btn done" disabled>Paid ✓ — back next month</button></div>`
+        ? `<div class="act-btns paid-pair">
+             <button class="btn done" disabled>Paid ✓ — back next month</button>
+             ${cyclePayIndex(g) >= 0
+               ? `<button class="btn sec undo-house" data-i="${cyclePayIndex(g)}">Undo</button>`
+               : ""}
+           </div>`
         : windowOpen
         ? `<div class="act-btns">
             ${payButton({ label: "Pay for the whole house", amount: house, by: g.payer, to: g.to,
@@ -200,6 +208,16 @@ export function render() {
          — your part shows under Settle up once they've paid</div>
      </div>`;
   wirePayButtons(el("pay-actions"));
+  el("pay-actions").querySelectorAll(".undo-house").forEach((b) => {
+    b.onclick = () => {
+      const p = payDraft[+b.dataset.i];
+      if (!p) return;
+      if (!confirm(`Undo the ${money(p.amount)} whole-house payment by ${p.by}?`)) return;
+      payDraft.splice(+b.dataset.i, 1);
+      savePayDraft();
+      render();
+    };
+  });
 
   /* ---- settle up with roommates ---- */
   const mineMoves = moves.filter((m) => m.from === who);
@@ -302,6 +320,29 @@ export function render() {
     b.onclick = () => { payDraft.splice(+b.dataset.i, 1); savePayDraft(); render(); };
   });
 
+  /* ---- admin: every transaction, deletable ---- */
+  el("admin-list").innerHTML =
+    (PAYMENTS.map((p) => `
+      <div class="arow locked">
+        <span>${p.date} — ${p.by} → ${p.to} — ${p.note || ""}</span>
+        <span>${money(p.amount)} · in data.js</span>
+      </div>`).join("")) +
+    (payDraft.map((p, i) => `
+      <div class="arow">
+        <span>${p.date} — ${p.by} → ${p.to} — ${p.note || ""}</span>
+        <span><button class="adel" data-i="${i}">delete</button>${money(p.amount)}</span>
+      </div>`).join("")) ||
+    `<div class="arow">no transactions</div>`;
+  el("admin-list").querySelectorAll(".adel").forEach((b) => {
+    b.onclick = () => {
+      const p = payDraft[+b.dataset.i];
+      if (!confirm(`Delete: ${p.by} → ${p.to} ${money(p.amount)}?`)) return;
+      payDraft.splice(+b.dataset.i, 1);
+      savePayDraft();
+      render();
+    };
+  });
+
   el("settle").innerHTML = moves.length
     ? moves.map((m) => `<div class="move"><span style="font-weight:400"><b>${m.from}</b> pays
         <b>${m.to}</b></span><span>${money(m.amt)}</span></div>`).join("")
@@ -353,6 +394,22 @@ el("reset-draft").onclick = () => {
 };
 el("reset-pay").onclick = () => {
   if (!confirm("Discard the payments logged on this device?")) return;
+  setPayDraft([]);
+  savePayDraft();
+  render();
+};
+
+/* ---------- admin bulk actions ---------- */
+el("admin-clear-bills").onclick = () => {
+  if (!confirm("Clear ALL bill edits? Bills go back to what's in data.js.")) return;
+  setDraft({});
+  saveDraft();
+  mergeBills();
+  render();
+};
+el("admin-clear-pays").onclick = () => {
+  if (!confirm("Delete ALL logged payments? (Payments written in data.js stay.)")) return;
+  if (!confirm("Really sure? This affects everyone if shared storage is on.")) return;
   setPayDraft([]);
   savePayDraft();
   render();
