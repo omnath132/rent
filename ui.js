@@ -7,11 +7,17 @@ import {
   draft, setDraft, mergeBills, DRAFT_KEY,
   payDraft, setPayDraft, savePayDraft,
   money, r2, monthLabel, dateLabel, TODAY,
-  utilitiesFor, buildSchedule, computeBalances, settle,
+  utilitiesFor, buildSchedule, computeBalances, isPerson,
 } from "./app.js";
 
 const el = (id) => document.getElementById(id);
-const isPerson = (x) => PEOPLE.includes(x);
+
+/* ---------- session snapshot: what things looked like on page load ---------- */
+const clone = (x) => JSON.parse(JSON.stringify(x));
+const SESSION0 = { draft: clone(draft), pay: clone(payDraft) };
+const sessionDirty = () =>
+  JSON.stringify(draft) !== JSON.stringify(SESSION0.draft) ||
+  JSON.stringify(payDraft) !== JSON.stringify(SESSION0.pay);
 
 /* ---------- who am I ---------- */
 const ME_KEY = "rent-tracker-me";
@@ -34,15 +40,19 @@ el("sheet").onclick = (e) => {
 };
 
 /* ---------- payment buttons ---------- */
-function logPayment(by, amount, to, note) {
-  payDraft.push({ date: new Date().toISOString().slice(0, 10), by, amount: r2(amount), to, note });
+function logPayment(by, amount, to, note, covers) {
+  const entry = { date: new Date().toISOString().slice(0, 10), by, amount: r2(amount), to, note };
+  if (covers) entry.covers = covers;
+  payDraft.push(entry);
   savePayDraft();
   render();
 }
 
-function payButton({ label, amount, by, to, note, cls = "" }) {
+function payButton({ label, amount, by, to, note, covers, cls = "" }) {
   return `<button class="btn ${cls}" data-by="${by}" data-amt="${r2(amount)}"
-    data-to="${to}" data-note="${note}" ${amount <= 0.005 ? "disabled" : ""}>
+    data-to="${to}" data-note="${note}"
+    ${covers ? `data-covers='${JSON.stringify(covers)}'` : ""}
+    ${amount <= 0.005 ? "disabled" : ""}>
     <span>${label}</span><b>${money(Math.max(amount, 0))}</b></button>`;
 }
 
@@ -51,9 +61,11 @@ function wirePayButtons(root) {
     b.onclick = () => {
       const amt = Number(b.dataset.amt);
       if (!(amt > 0)) return;
+      const covers = b.dataset.covers ? JSON.parse(b.dataset.covers) : null;
       const dest = isPerson(b.dataset.to) ? b.dataset.to : b.dataset.to.toLowerCase();
-      if (!confirm(`Log ${money(amt)} paid by ${b.dataset.by} to ${dest}?`)) return;
-      logPayment(b.dataset.by, amt, b.dataset.to, b.dataset.note);
+      const extra = covers ? "\n\nThe others' shares get logged as owed to you." : "";
+      if (!confirm(`Log ${money(amt)} paid by ${b.dataset.by} to ${dest}?${extra}`)) return;
+      logPayment(b.dataset.by, amt, b.dataset.to, b.dataset.note, covers);
     };
   });
 }
@@ -61,10 +73,12 @@ function wirePayButtons(root) {
 /* ---------- render ---------- */
 export function render() {
   const schedule = buildSchedule();
-  const balances = computeBalances(schedule);
+  const { balances, moves } = computeBalances(schedule);
   const bal = Object.fromEntries(balances.map((b) => [b.name, b]));
-  const moves = settle(balances);
   const nextRow = schedule.find((r) => r.dueDate >= TODAY);
+
+  /* undo-this-visit button */
+  el("undo-btn").classList.toggle("on", sessionDirty());
 
   /* identity chip */
   el("who-initial").textContent = ME ? ME[0] : "?";
@@ -147,7 +161,7 @@ export function render() {
         `<span class="chip">${p} ${money(g.per[p])}</span>`).join("")}</div>
       <div class="act-btns">
         ${payButton({ label: "Pay for the whole house", amount: house, by: who, to: g.to,
-                      note: `${g.title} — whole house` })}
+                      note: `${g.title} — whole house`, covers: g.per })}
         ${payButton({ label: "Just my share", amount: g.per[who], by: who, to: g.to,
                       note: `${g.title} — ${who}'s share`, cls: "sec" })}
       </div>
@@ -241,13 +255,13 @@ export function render() {
   el("log").innerHTML =
     payDraft.map((p, i) => `
       <div class="prow new">
-        <div><b>${p.by}</b> → ${p.to}<i>${p.note} · not in data.js yet</i></div>
+        <div><b>${p.by}</b> → ${isPerson(p.to) ? p.to : p.to.toLowerCase()}<i>${
+          p.note} · not in data.js yet</i></div>
         <div class="pamt">${money(p.amount)}<button class="undo" data-i="${i}">undo</button></div>
       </div>`).reverse().join("") +
     [...PAYMENTS].reverse().map((p) => `
       <div class="prow">
-        <div><b>${p.by}</b> → ${p.to === "Outside" ? "landlord / utility" : p.to}<i>${
-          p.note || ""}</i></div>
+        <div><b>${p.by}</b> → ${isPerson(p.to) ? p.to : p.to.toLowerCase()}<i>${p.note || ""}</i></div>
         <div class="pamt">${money(p.amount)}<i>${p.date}</i></div>
       </div>`).join("");
   el("log").querySelectorAll(".undo").forEach((b) => {
@@ -280,9 +294,12 @@ function billsSnippet() {
   return `export const BILLS = {\n${body}\n};`;
 }
 function paySnippet() {
-  return payDraft.map((p) =>
-    `  { date: "${p.date}", by: "${p.by}", amount: ${p.amount.toFixed(2)}, to: "${p.to}", note: "${p.note}" },`
-  ).join("\n");
+  return payDraft.map((p) => {
+    const covers = p.covers
+      ? `,\n    covers: { ${Object.entries(p.covers).map(([k, v]) => `${k}: ${v.toFixed(2)}`).join(", ")} }`
+      : "";
+    return `  { date: "${p.date}", by: "${p.by}", amount: ${p.amount.toFixed(2)}, to: "${p.to}", note: "${p.note}"${covers} },`;
+  }).join("\n");
 }
 async function copyText(btn, text) {
   const label = btn.textContent;
@@ -317,6 +334,17 @@ document.querySelectorAll(".tab").forEach((t) => {
 });
 addEventListener("scroll",
   () => el("topbar").classList.toggle("stuck", scrollY > 4), { passive: true });
+
+/* ---------- undo everything from this visit ---------- */
+el("undo-btn").onclick = () => {
+  if (!confirm("Undo all bill edits and logged payments from this visit?\n\nEverything goes back to how it was when you opened the page.")) return;
+  setDraft(clone(SESSION0.draft));
+  localStorage.setItem(DRAFT_KEY, JSON.stringify(SESSION0.draft));
+  mergeBills();
+  setPayDraft(clone(SESSION0.pay));
+  savePayDraft();
+  render();
+};
 
 /* ---------- light / dark toggle: auto → light → dark → auto ---------- */
 const THEME_KEY = "rent-tracker-theme";

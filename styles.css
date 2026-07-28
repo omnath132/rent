@@ -76,6 +76,8 @@ body{
   transition:transform .2s var(--ease)
 }
 .theme:active{transform:scale(.9) rotate(-15deg)}
+.undo-all{display:none;font-size:18px}
+.undo-all.on{display:grid}
 
 /* ---------- hero ---------- */
 .hero{

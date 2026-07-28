@@ -121,50 +121,68 @@ function buildSchedule() {
   return rows;
 }
 
-/* ---------- 3. balances ---------- */
+/* ---------- 3. balances + who-owes-whom ----------
+   Two ledgers:
+   · outside — what each person still owes the landlord / utility co
+     (accrued dues minus their own payments out of the house)
+   · IOUs   — debts between roommates: created when someone fronts a
+     whole-house bill (covers), cleared when a payment's "to" is a
+     roommate.
+   A person's headline balance is outside + net IOUs.               */
+const isPerson = (x) => PEOPLE.includes(x);
+
 function computeBalances(schedule) {
-  const owed = Object.fromEntries(PEOPLE.map((p) => [p, 0]));
+  const owedOut = Object.fromEntries(PEOPLE.map((p) => [p, 0]));
   for (const row of schedule) {
     if (!row.isDue) continue;
-    for (const p of PEOPLE) owed[p] += row.per[p].rent + row.per[p].util;
+    for (const p of PEOPLE) owedOut[p] += row.per[p].rent + row.per[p].util;
   }
 
-  const paid = Object.fromEntries(PEOPLE.map((p) => [p, 0]));
+  const paidOut = Object.fromEntries(PEOPLE.map((p) => [p, 0]));
+  const iou = {};                                  // iou[a][b] = a owes b
+  const addIou = (a, b, amt) => {
+    iou[a] = iou[a] || {};
+    iou[a][b] = (iou[a][b] || 0) + amt;
+  };
   for (const pay of allPayments()) {
-    paid[pay.by] = (paid[pay.by] || 0) + pay.amount;
-    if (pay.to !== "Outside" && paid[pay.to] !== undefined) paid[pay.to] -= pay.amount;
+    if (isPerson(pay.to)) {
+      addIou(pay.by, pay.to, -pay.amount);         // paying a roommate back
+    } else if (pay.covers) {
+      for (const [p, amt] of Object.entries(pay.covers)) {
+        if (!isPerson(p)) continue;
+        paidOut[p] += amt;                          // their share is now paid
+        if (p !== pay.by) addIou(p, pay.by, amt);   // ...and they owe the payer
+      }
+    } else {
+      paidOut[pay.by] += pay.amount;                // paying your own share
+    }
   }
 
-  return PEOPLE.map((p) => ({
-    name: p,
-    owed: r2(owed[p]),
-    paid: r2(paid[p] || 0),
-    out: r2((owed[p] || 0) - (paid[p] || 0)),
-  }));
-}
-
-/* ---------- 4. who pays whom (proportional settle) ----------
-   Each creditor's credit is split across the debtors in proportion
-   to what they owe, so everyone who owes chips in on the payback. */
-function settle(balances) {
-  const debtors = balances.filter((b) => b.out > 0.005);
-  const creditors = balances.filter((b) => b.out < -0.005);
-  const totalDebt = debtors.reduce((s, d) => s + d.out, 0);
-  if (!debtors.length || !creditors.length || totalDebt <= 0) return [];
-
+  /* net pairwise moves */
   const moves = [];
-  for (const c of creditors) {
-    const credit = -c.out;
-    let allocated = 0;
-    debtors.forEach((d, i) => {
-      let amt = i === debtors.length - 1
-        ? r2(credit - allocated)                    // last debtor absorbs rounding
-        : r2(credit * (d.out / totalDebt));
-      allocated = r2(allocated + amt);
-      if (amt > 0.005) moves.push({ from: d.name, to: c.name, amt });
-    });
+  for (let i = 0; i < PEOPLE.length; i++) {
+    for (let j = i + 1; j < PEOPLE.length; j++) {
+      const a = PEOPLE[i], b = PEOPLE[j];
+      const net = r2((iou[a]?.[b] || 0) - (iou[b]?.[a] || 0));
+      if (net > 0.005) moves.push({ from: a, to: b, amt: net });
+      else if (net < -0.005) moves.push({ from: b, to: a, amt: -net });
+    }
   }
-  return moves;
+
+  const balances = PEOPLE.map((p) => {
+    const owesRoom = moves.filter((m) => m.from === p).reduce((s, m) => s + m.amt, 0);
+    const owedRoom = moves.filter((m) => m.to === p).reduce((s, m) => s + m.amt, 0);
+    const outside = r2(owedOut[p] - paidOut[p]);
+    return {
+      name: p,
+      owed: r2(owedOut[p]),
+      paid: r2(paidOut[p]),
+      outside,
+      out: r2(outside + owesRoom - owedRoom),
+    };
+  });
+
+  return { balances, moves };
 }
 
 
@@ -175,7 +193,7 @@ export {
   draft, DRAFT_KEY, mergeBills,
   payDraft, savePayDraft,
   money, r2, monthLabel, dateLabel, TODAY,
-  utilitiesFor, buildSchedule, computeBalances, settle,
+  utilitiesFor, buildSchedule, computeBalances, isPerson,
 };
 export function setDraft(v) { draft = v; }
 export function setPayDraft(v) { payDraft = v; }

@@ -1,6 +1,6 @@
 /* ============================================================
    THE ONLY FILE YOU EDIT.
-   Change a number, save, push to GitHub — the site updates.
+   Change a number, save, push — the site updates.
    ============================================================ */
 
 export const PEOPLE = ["Aidan", "Brandon", "Simon", "Spence"];
@@ -20,8 +20,7 @@ export const DUE_DAY = 28;
 export const OWED_LEAD_DAYS = 7;
 
 /* Rent is for the month ahead; utilities are for the month just ending.
-   So on the 28th of July you pay AUGUST rent + JULY utilities  -> 1.
-   (The old spreadsheet lagged utilities by 2, paying the June bill.) */
+   So on the 28th of July you pay AUGUST rent + JULY utilities. */
 export const UTILITY_MONTHS_BEHIND_RENT = 1;
 
 /* ------------------------------------------------------------
@@ -29,8 +28,8 @@ export const UTILITY_MONTHS_BEHIND_RENT = 1;
    Leave a bill out (or null) if it hasn't arrived yet.
    ------------------------------------------------------------ */
 export const BILLS = {
-  "2026-06": { wifi: 74.91, gas: 20.61, electric: 38.37, water: 172.30 },
-  "2026-07": { wifi: 70.00, gas: 39.07, electric: null,  water: 172.90 },
+  "2026-06": { wifi: 74.91, gas: 20.61, electric: 38.37 },   // water settled separately, everyone paid their own
+  "2026-07": { wifi: 70.00 },
   "2026-08": { wifi: 70.00 },
   "2026-09": { wifi: 70.00 },
   "2026-10": { wifi: 70.00 },
@@ -48,27 +47,24 @@ export const BILLS = {
 /* ------------------------------------------------------------
    SPLIT RULES
    Default: every bill split evenly 4 ways.
-   Exception: in these months, the named people pay a FIXED amount
-   of the water bill and the remaining person covers the rest.
+   To make some people pay a FIXED amount of a month's water bill
+   (like summer 2026), add an entry here:
+     "2027-06": { fixed: { Aidan: 30, Brandon: 30, Spence: 30 }, remainderPaidBy: "Simon" },
    ------------------------------------------------------------ */
-export const WATER_FIXED_MONTHS = {
-  "2026-06": { fixed: { Aidan: 30, Brandon: 30, Spence: 30 }, remainderPaidBy: "Simon" },
-  "2026-07": { fixed: { Aidan: 30, Brandon: 30, Spence: 30 }, remainderPaidBy: "Simon" },
-};
+export const WATER_FIXED_MONTHS = {};
 
 /* ------------------------------------------------------------
    PAYMENTS LOG — add a line every time someone pays.
-   to: "Outside"  = landlord / utility company
-   to: "Aidan"    = paying a roommate back (a reimbursement)
+   to: "Landlord" / "Utility co"  = money leaving the house
+   to: "Aidan" (a name)           = paying a roommate back
+   covers: (optional) whose shares a whole-house payment covered —
+           everyone listed except the payer then owes the payer.
+   Examples:
+     { date: "2026-07-28", by: "Simon", amount: 802.50, to: "Landlord", note: "Rent + water — Simon's share" },
+     { date: "2026-07-29", by: "Brandon", amount: 33.47, to: "Aidan", note: "Settle up" },
    ------------------------------------------------------------ */
 export const PAYMENTS = [
-  { date: "2026-06-28", by: "Aidan",   amount: 30,     to: "Outside", note: "June 2026 water" },
-  { date: "2026-06-28", by: "Aidan",   amount: 985,    to: "Outside", note: "Rent + insurance" },
-  { date: "2026-06-28", by: "Brandon", amount: 30,     to: "Outside", note: "June 2026 water" },
-  { date: "2026-06-28", by: "Brandon", amount: 835,    to: "Outside", note: "Rent + insurance" },
-  { date: "2026-06-28", by: "Simon",   amount: 82.30,  to: "Outside", note: "June 2026 water" },
-  { date: "2026-06-28", by: "Simon",   amount: 785,    to: "Outside", note: "Rent + insurance" },
-  { date: "2026-06-28", by: "Spence",  amount: 30,     to: "Outside", note: "June 2026 water" },
-  { date: "2026-06-28", by: "Spence",  amount: 815,    to: "Outside", note: "Rent + insurance" },
-  { date: "2026-07-16", by: "Aidan",   amount: 133.89, to: "Outside", note: "June 2026 utilities" },
+  { date: "2026-07-16", by: "Aidan", amount: 133.89, to: "Utility co",
+    note: "June 2026 utilities — whole house",
+    covers: { Aidan: 33.4725, Brandon: 33.4725, Simon: 33.4725, Spence: 33.4725 } },
 ];
