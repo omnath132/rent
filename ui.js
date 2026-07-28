@@ -1,0 +1,343 @@
+/* ============================================================
+   UI layer — rendering, the identity picker, and the pay buttons.
+   All the money logic lives in app.js.
+   ============================================================ */
+import {
+  PEOPLE, BILLS, BILLS_FILE, PAYMENTS, KINDS,
+  draft, setDraft, mergeBills, DRAFT_KEY,
+  payDraft, setPayDraft, savePayDraft,
+  money, r2, monthLabel, dateLabel, TODAY,
+  utilitiesFor, buildSchedule, computeBalances, settle,
+} from "./app.js";
+
+const el = (id) => document.getElementById(id);
+const isPerson = (x) => PEOPLE.includes(x);
+
+/* ---------- who am I ---------- */
+const ME_KEY = "rent-tracker-me";
+let ME = localStorage.getItem(ME_KEY);
+if (!PEOPLE.includes(ME)) ME = null;
+
+function setMe(name) {
+  ME = name;
+  localStorage.setItem(ME_KEY, name);
+  el("sheet").classList.remove("on");
+  render();
+}
+
+el("pick").innerHTML = PEOPLE.map((p) =>
+  `<button data-p="${p}"><span class="avatar">${p[0]}</span>${p}</button>`).join("");
+el("pick").querySelectorAll("button").forEach((b) => (b.onclick = () => setMe(b.dataset.p)));
+el("who-btn").onclick = () => el("sheet").classList.add("on");
+el("sheet").onclick = (e) => {
+  if (e.target === el("sheet") && ME) el("sheet").classList.remove("on");
+};
+
+/* ---------- payment buttons ---------- */
+function logPayment(by, amount, to, note) {
+  payDraft.push({ date: new Date().toISOString().slice(0, 10), by, amount: r2(amount), to, note });
+  savePayDraft();
+  render();
+}
+
+function payButton({ label, amount, by, to, note, cls = "" }) {
+  return `<button class="btn ${cls}" data-by="${by}" data-amt="${r2(amount)}"
+    data-to="${to}" data-note="${note}" ${amount <= 0.005 ? "disabled" : ""}>
+    <span>${label}</span><b>${money(Math.max(amount, 0))}</b></button>`;
+}
+
+function wirePayButtons(root) {
+  root.querySelectorAll(".btn[data-amt]").forEach((b) => {
+    b.onclick = () => {
+      const amt = Number(b.dataset.amt);
+      if (!(amt > 0)) return;
+      const dest = isPerson(b.dataset.to) ? b.dataset.to : b.dataset.to.toLowerCase();
+      if (!confirm(`Log ${money(amt)} paid by ${b.dataset.by} to ${dest}?`)) return;
+      logPayment(b.dataset.by, amt, b.dataset.to, b.dataset.note);
+    };
+  });
+}
+
+/* ---------- render ---------- */
+export function render() {
+  const schedule = buildSchedule();
+  const balances = computeBalances(schedule);
+  const bal = Object.fromEntries(balances.map((b) => [b.name, b]));
+  const moves = settle(balances);
+  const nextRow = schedule.find((r) => r.dueDate >= TODAY);
+
+  /* identity chip */
+  el("who-initial").textContent = ME ? ME[0] : "?";
+  el("who-name").textContent = ME || "Who are you?";
+  if (!ME) el("sheet").classList.add("on");
+  el("pick").querySelectorAll("button").forEach((b) =>
+    b.classList.toggle("on", b.dataset.p === ME));
+
+  /* hero */
+  if (ME) {
+    const out = bal[ME].out;
+    el("my-amt").textContent = money(Math.abs(out));
+    el("my-amt").className = "big num " + (out > 0.005 ? "neg" : out < -0.005 ? "pos" : "");
+    el("my-state").textContent =
+      out > 0.005 ? "you owe" : out < -0.005 ? "you're owed" : "all square";
+  } else {
+    el("my-amt").textContent = "—";
+    el("my-amt").className = "big num";
+    el("my-state").textContent = "pick your name to see your balance";
+  }
+
+  if (nextRow) {
+    const days = Math.round((nextRow.dueDate - TODAY) / 86400000);
+    const mine = ME ? nextRow.per[ME] : null;
+    el("next-det").innerHTML =
+      `<b>Next due ${dateLabel(nextRow.dueDate)}</b> — ${
+        days === 0 ? "today" : days === 1 ? "tomorrow" : `in ${days} days`}<br>` +
+      [nextRow.rentMonth ? `${monthLabel(nextRow.rentMonth)} rent` : null,
+       nextRow.utilMonth ? `${monthLabel(nextRow.utilMonth)} utilities` : null]
+        .filter(Boolean).join(" + ") +
+      `<br><b>${money(nextRow.total)}</b> for the house` +
+      (mine ? ` · <b>${money(mine.rent + mine.util)}</b> yours` : "");
+  } else {
+    el("next-det").innerHTML = "<b>No upcoming due dates.</b>";
+  }
+
+  /* everyone */
+  el("cards").innerHTML = balances.map((b) => {
+    const state = b.out > 0.005 ? "owes" : b.out < -0.005 ? "ahead" : "even";
+    return `<div class="card ${state}${b.name === ME ? " me" : ""}">
+      <div class="card-name">${b.name}${b.name === ME ? " <em>YOU</em>" : ""}</div>
+      <div class="card-amt num">${money(Math.abs(b.out))}</div>
+      <div class="card-state">${
+        state === "owes" ? "owes" : state === "ahead" ? "is owed" : "all square"}</div>
+    </div>`;
+  }).join("");
+
+  /* ---- PAY: the two outside bills ---- */
+  const who = ME || PEOPLE[0];
+  const per = nextRow ? nextRow.per
+    : Object.fromEntries(PEOPLE.map((p) => [p, { rent: 0, util: 0, water: 0, other: 0 }]));
+
+  const groups = [
+    {
+      title: "Rent + water", to: "Landlord",
+      sub: nextRow?.rentMonth
+        ? `${monthLabel(nextRow.rentMonth)} rent${
+            nextRow.utilMonth ? ` · ${monthLabel(nextRow.utilMonth)} water` : ""}`
+        : "nothing due",
+      per: Object.fromEntries(PEOPLE.map((p) => [p, r2(per[p].rent + per[p].water)])),
+    },
+    {
+      title: "Other utilities", to: "Utility co",
+      sub: `wifi · gas · electric${nextRow?.utilMonth ? ` — ${monthLabel(nextRow.utilMonth)}` : ""}`,
+      per: Object.fromEntries(PEOPLE.map((p) => [p, r2(per[p].other)])),
+    },
+  ];
+
+  el("pay-actions").innerHTML = groups.map((g) => {
+    const house = r2(PEOPLE.reduce((s, p) => s + g.per[p], 0));
+    return `<div class="act">
+      <div class="act-top">
+        <div>
+          <div class="act-title">${g.title}</div>
+          <div class="act-to">to ${g.to} · ${g.sub}</div>
+        </div>
+        <div class="act-amt num">${money(house)}<i>whole house</i></div>
+      </div>
+      <div class="act-split">${PEOPLE.map((p) =>
+        `<span class="chip">${p} ${money(g.per[p])}</span>`).join("")}</div>
+      <div class="act-btns">
+        ${payButton({ label: "Pay for the whole house", amount: house, by: who, to: g.to,
+                      note: `${g.title} — whole house` })}
+        ${payButton({ label: "Just my share", amount: g.per[who], by: who, to: g.to,
+                      note: `${g.title} — ${who}'s share`, cls: "sec" })}
+      </div>
+    </div>`;
+  }).join("");
+  wirePayButtons(el("pay-actions"));
+
+  /* ---- settle up with roommates ---- */
+  const mineMoves = moves.filter((m) => m.from === who);
+  const otherMoves = moves.filter((m) => m.from !== who);
+  el("settle-actions").innerHTML =
+    (mineMoves.length
+      ? `<div class="act">
+           <div class="act-top"><div>
+             <div class="act-title">Pay a roommate back</div>
+             <div class="act-to">they covered part of your share</div>
+           </div></div>
+           <div class="act-btns">${mineMoves.map((m) => payButton({
+             label: `Pay ${m.to}`, amount: m.amt, by: who, to: m.to,
+             note: `Settle up with ${m.to}` })).join("")}</div>
+         </div>`
+      : `<div class="act">
+           <div class="act-title">Nothing to settle</div>
+           <div class="act-to">you don't owe any roommate right now</div>
+         </div>`) +
+    (otherMoves.length
+      ? `<div class="box" style="margin-top:12px">${otherMoves.map((m) =>
+          `<div class="move"><span style="font-weight:400"><b>${m.from}</b> pays <b>${m.to}</b></span>
+           <span>${money(m.amt)}</span></div>`).join("")}</div>`
+      : "");
+  wirePayButtons(el("settle-actions"));
+
+  el("pay-bar").className = payDraft.length ? "draftbar on" : "draftbar";
+
+  /* ---- bills editor ---- */
+  const months = Object.keys(BILLS).sort();
+  const openNow = new Set([...document.querySelectorAll(".bill[open]")].map((d) => d.dataset.mk));
+  el("draft-bar").className = Object.keys(draft).length ? "draftbar on" : "draftbar";
+
+  el("bills").innerHTML = months.map((mk) => {
+    const u = utilitiesFor(mk);
+    const missing = KINDS.filter((k) => (BILLS[mk] || {})[k] == null);
+    const edited = draft[mk] || {};
+    return `<details class="bill" data-mk="${mk}" ${openNow.has(mk) ? "open" : ""}>
+      <summary><span>${monthLabel(mk)}${Object.keys(edited).length ? "<em>edited</em>" : ""}</span>
+        <span class="bill-total num">${u.hasAny ? money(u.total) : "—"}${
+          missing.length ? `<i>${missing.length} not billed</i>` : ""}</span></summary>
+      <div class="bill-body">
+        ${KINDS.map((k) => {
+          const v = (BILLS[mk] || {})[k];
+          return `<label class="erow${edited[k] !== undefined ? " ed" : ""}">
+            <span>${k}</span>
+            <span class="inp">$<input type="number" inputmode="decimal" step="0.01" min="0"
+              placeholder="—" value="${v == null ? "" : v}" data-mk="${mk}" data-kind="${k}"></span>
+          </label>`;
+        }).join("")}
+        ${u.hasAny ? `<div class="row split">${PEOPLE.map((p) =>
+          `<span>${p}<b>${money(u.share[p])}</b></span>`).join("")}</div>` : ""}
+        ${u.lines.map((l) => `<div class="hint">${l.kind}: ${l.note}</div>`).join("")}
+      </div>
+    </details>`;
+  }).join("");
+
+  el("bills").querySelectorAll("input").forEach((inp) => {
+    inp.onchange = () => {
+      const { mk, kind } = inp.dataset;
+      const raw = inp.value.trim();
+      draft[mk] = draft[mk] || {};
+      draft[mk][kind] = raw === "" ? null : Number(raw);
+      const original = (BILLS_FILE[mk] || {})[kind] ?? null;
+      if (draft[mk][kind] === original) delete draft[mk][kind];
+      if (!Object.keys(draft[mk]).length) delete draft[mk];
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      mergeBills();
+      render();
+    };
+  });
+
+  /* ---- schedule ---- */
+  el("schedule").innerHTML = schedule.map((row) => `
+    <div class="srow ${row.isPast ? "past" : row === nextRow ? "now" : ""}">
+      <div class="sdate">${dateLabel(row.dueDate)}<i>${
+        [row.rentMonth ? `${monthLabel(row.rentMonth)} rent` : null,
+         row.utilMonth ? `${monthLabel(row.utilMonth)} utilities` : null]
+          .filter(Boolean).join(" + ")}</i></div>
+      <div class="samt">${money(row.total)}<i>${
+        row.isPast ? "past" : row.isDue ? "due now" : "upcoming"}</i></div>
+    </div>`).join("");
+
+  /* ---- history ---- */
+  el("log").innerHTML =
+    payDraft.map((p, i) => `
+      <div class="prow new">
+        <div><b>${p.by}</b> → ${p.to}<i>${p.note} · not in data.js yet</i></div>
+        <div class="pamt">${money(p.amount)}<button class="undo" data-i="${i}">undo</button></div>
+      </div>`).reverse().join("") +
+    [...PAYMENTS].reverse().map((p) => `
+      <div class="prow">
+        <div><b>${p.by}</b> → ${p.to === "Outside" ? "landlord / utility" : p.to}<i>${
+          p.note || ""}</i></div>
+        <div class="pamt">${money(p.amount)}<i>${p.date}</i></div>
+      </div>`).join("");
+  el("log").querySelectorAll(".undo").forEach((b) => {
+    b.onclick = () => { payDraft.splice(+b.dataset.i, 1); savePayDraft(); render(); };
+  });
+
+  el("settle").innerHTML = moves.length
+    ? moves.map((m) => `<div class="move"><span style="font-weight:400"><b>${m.from}</b> pays
+        <b>${m.to}</b></span><span>${money(m.amt)}</span></div>`).join("")
+    : `<div class="empty">Everyone's square 🎉</div>`;
+
+  el("next-breakdown").innerHTML = nextRow
+    ? PEOPLE.map((p) => {
+        const x = nextRow.per[p];
+        return `<div class="move"><span style="font-weight:500">${p}</span>
+                  <span>${money(x.rent + x.util)}</span></div>
+                <div class="sub">rent ${money(x.rent)} · water ${money(x.water)} · other ${
+                  money(x.other)}</div>`;
+      }).join("")
+    : `<div class="empty">Nothing upcoming.</div>`;
+}
+
+/* ---------- paste-ready snippets for data.js ---------- */
+function billsSnippet() {
+  const body = Object.keys(BILLS).sort().map((mk) => {
+    const kept = KINDS.filter((k) => BILLS[mk][k] != null)
+      .map((k) => `${k}: ${Number(BILLS[mk][k]).toFixed(2)}`).join(", ");
+    return `  "${mk}": { ${kept} },`;
+  }).join("\n");
+  return `export const BILLS = {\n${body}\n};`;
+}
+function paySnippet() {
+  return payDraft.map((p) =>
+    `  { date: "${p.date}", by: "${p.by}", amount: ${p.amount.toFixed(2)}, to: "${p.to}", note: "${p.note}" },`
+  ).join("\n");
+}
+async function copyText(btn, text) {
+  const label = btn.textContent;
+  try { await navigator.clipboard.writeText(text); btn.textContent = "Copied ✓"; }
+  catch { prompt("Copy this into data.js:", text); }
+  setTimeout(() => (btn.textContent = label), 1800);
+}
+
+el("copy-draft").onclick = (e) => copyText(e.currentTarget, billsSnippet());
+el("copy-pay").onclick = (e) => copyText(e.currentTarget, paySnippet());
+el("reset-draft").onclick = () => {
+  if (!confirm("Discard your local bill edits?")) return;
+  setDraft({});
+  localStorage.removeItem(DRAFT_KEY);
+  mergeBills();
+  render();
+};
+el("reset-pay").onclick = () => {
+  if (!confirm("Discard the payments logged on this device?")) return;
+  setPayDraft([]);
+  savePayDraft();
+  render();
+};
+
+/* ---------- tabs + sticky header ---------- */
+document.querySelectorAll(".tab").forEach((t) => {
+  t.onclick = () => {
+    document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("on", x === t));
+    document.querySelectorAll(".panel").forEach((x) =>
+      x.classList.toggle("on", x.id === "panel-" + t.dataset.p));
+  };
+});
+addEventListener("scroll",
+  () => el("topbar").classList.toggle("stuck", scrollY > 4), { passive: true });
+
+/* ---------- light / dark toggle: auto → light → dark → auto ---------- */
+const THEME_KEY = "rent-tracker-theme";
+function themeIcon() {
+  const t = localStorage.getItem(THEME_KEY);
+  el("theme-btn").textContent = t === "light" ? "☀️" : t === "dark" ? "🌙" : "◐";
+  el("theme-btn").title =
+    t === "light" ? "Light — tap for dark" : t === "dark" ? "Dark — tap for auto" : "Auto — tap for light";
+}
+el("theme-btn").onclick = () => {
+  const cur = localStorage.getItem(THEME_KEY);
+  const next = cur === "light" ? "dark" : cur === "dark" ? null : "light";
+  if (next) {
+    localStorage.setItem(THEME_KEY, next);
+    document.documentElement.dataset.theme = next;
+  } else {
+    localStorage.removeItem(THEME_KEY);
+    delete document.documentElement.dataset.theme;
+  }
+  themeIcon();
+};
+themeIcon();
+
+render();

@@ -1,0 +1,296 @@
+/* ---------------------------------------------------------
+   Apple-ish: soft greys, deep radii, quiet shadows, tabular
+   numerals everywhere money appears.
+   --------------------------------------------------------- */
+:root{
+  --bg:#f5f5f7; --card:#fff; --card2:#fbfbfd;
+  --ink:#1d1d1f; --dim:#86868b; --line:#e3e3e6;
+  --blue:#0071e3; --blue-ink:#fff;
+  --red:#d3253c; --red-bg:#fff0f1;
+  --green:#03844a; --green-bg:#eaf8f0;
+  --shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.05);
+  --radius:20px;
+  --ease:cubic-bezier(.32,.72,0,1);
+}
+/* Dark palette applies when the user picked dark, or when the system is
+   dark and the user hasn't picked light. */
+:root[data-theme="dark"]{
+  --bg:#000; --card:#1c1c1e; --card2:#242426;
+  --ink:#f5f5f7; --dim:#98989d; --line:#38383a;
+  --blue:#0a84ff; --red:#ff6b6b; --red-bg:#2b1417;
+  --green:#30d158; --green-bg:#0e2417;
+  --shadow:0 1px 2px rgba(0,0,0,.5);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#000; --card:#1c1c1e; --card2:#242426;
+    --ink:#f5f5f7; --dim:#98989d; --line:#38383a;
+    --blue:#0a84ff; --red:#ff6b6b; --red-bg:#2b1417;
+    --green:#30d158; --green-bg:#0e2417;
+    --shadow:0 1px 2px rgba(0,0,0,.5);
+  }
+}
+html{color-scheme:light}
+html[data-theme="dark"]{color-scheme:dark}
+@media (prefers-color-scheme:dark){
+  html:not([data-theme="light"]){color-scheme:dark}
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font:17px/1.47 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;
+  letter-spacing:-.011em;-webkit-font-smoothing:antialiased;
+  padding-bottom:calc(56px + env(safe-area-inset-bottom));
+}
+.num{font-variant-numeric:tabular-nums}
+.wrap{max-width:600px;margin:0 auto;padding:0 18px 40px}
+
+/* ---------- top bar ---------- */
+.topbar{
+  position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;
+  gap:12px;padding:12px 18px;margin:0 -18px 4px;
+  background:color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);
+  border-bottom:1px solid transparent;transition:border-color .3s
+}
+.topbar.stuck{border-bottom-color:var(--line)}
+.brand{font-size:17px;font-weight:600;letter-spacing:-.02em}
+.who{
+  display:flex;align-items:center;gap:7px;border:0;cursor:pointer;
+  background:var(--card);box-shadow:var(--shadow);color:var(--ink);
+  font:inherit;font-size:14px;font-weight:500;padding:6px 12px 6px 7px;border-radius:999px;
+  transition:transform .2s var(--ease)
+}
+.who:active{transform:scale(.96)}
+.avatar{
+  width:24px;height:24px;border-radius:50%;display:grid;place-items:center;
+  background:var(--blue);color:#fff;font-size:11px;font-weight:700;letter-spacing:0
+}
+.who .caret{color:var(--dim);font-size:11px}
+.topbar-right{display:flex;align-items:center;gap:8px}
+.theme{
+  width:36px;height:36px;border:0;border-radius:50%;cursor:pointer;display:grid;place-items:center;
+  background:var(--card);box-shadow:var(--shadow);color:var(--ink);font-size:16px;line-height:1;
+  transition:transform .2s var(--ease)
+}
+.theme:active{transform:scale(.9) rotate(-15deg)}
+
+/* ---------- hero ---------- */
+.hero{
+  background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);
+  padding:26px 22px;text-align:center;margin-top:8px
+}
+.eyebrow{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}
+.hero .big{font-size:44px;font-weight:700;letter-spacing:-.03em;line-height:1.05;margin:8px 0 2px}
+.hero .big.pos{color:var(--green)}
+.hero .big.neg{color:var(--red)}
+.hero .sub{font-size:15px;color:var(--dim)}
+.hero .det{
+  font-size:13px;color:var(--dim);margin-top:14px;padding-top:14px;border-top:1px solid var(--line)
+}
+.hero .det b{color:var(--ink);font-weight:600}
+
+/* ---------- section headings ---------- */
+h2{
+  font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--dim);margin:28px 4px 10px
+}
+h2.tight{margin-top:18px}
+
+/* ---------- people strip ---------- */
+#cards{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.card{
+  background:var(--card);border-radius:16px;box-shadow:var(--shadow);padding:14px 15px;
+  position:relative;overflow:hidden
+}
+.card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--line)}
+.card.owes::before{background:var(--red)}
+.card.ahead::before{background:var(--green)}
+.card.me{outline:2px solid var(--blue);outline-offset:-2px}
+.card-name{font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px}
+.card-name em{font-style:normal;font-size:10px;font-weight:700;color:var(--blue);letter-spacing:.04em}
+.card-amt{font-size:25px;font-weight:600;letter-spacing:-.025em;margin:3px 0 1px}
+.card.owes .card-amt{color:var(--red)}
+.card.ahead .card-amt{color:var(--green)}
+.card-state{font-size:12px;color:var(--dim)}
+
+/* ---------- segmented control ---------- */
+.tabs{
+  display:flex;gap:2px;margin:26px 0 14px;padding:2px;border-radius:11px;
+  background:color-mix(in srgb, var(--dim) 16%, transparent)
+}
+.tab{
+  flex:1;border:0;background:transparent;color:var(--ink);cursor:pointer;
+  font:inherit;font-size:13px;font-weight:500;padding:7px 4px;border-radius:9px;
+  transition:background .25s var(--ease), box-shadow .25s var(--ease), font-weight .1s
+}
+.tab.on{background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.12);font-weight:600}
+.panel{display:none;animation:fade .35s var(--ease)}
+.panel.on{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* ---------- generic grouped list ---------- */
+.box{background:var(--card);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+.move{display:flex;justify-content:space-between;align-items:center;gap:12px;
+  padding:14px 16px;border-bottom:1px solid var(--line);font-size:15px}
+.move:last-child{border-bottom:0}
+.move span{font-weight:600;font-variant-numeric:tabular-nums}
+.sub{padding:0 16px 12px;margin-top:-10px;font-size:12px;color:var(--dim);
+  border-bottom:1px solid var(--line)}
+.sub:last-child{border-bottom:0}
+.empty{padding:26px 16px;text-align:center;color:var(--dim);font-size:15px}
+
+/* ---------- pay actions ---------- */
+.act{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);
+  padding:18px;margin-bottom:12px}
+.act-top{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
+.act-title{font-size:17px;font-weight:600;letter-spacing:-.02em}
+.act-to{font-size:13px;color:var(--dim);margin-top:2px}
+.act-amt{font-size:22px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums;
+  text-align:right;white-space:nowrap}
+.act-amt i{display:block;font-style:normal;font-size:11px;font-weight:500;color:var(--dim);
+  letter-spacing:0}
+.act-split{display:flex;flex-wrap:wrap;gap:5px;margin:14px 0 0}
+.chip{font-size:11px;color:var(--dim);background:var(--bg);border-radius:7px;padding:4px 8px;
+  font-variant-numeric:tabular-nums}
+.act-btns{display:grid;gap:8px;margin-top:14px}
+
+.btn{
+  border:0;cursor:pointer;font:inherit;font-size:15px;font-weight:500;
+  padding:13px 16px;border-radius:13px;min-height:48px;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  background:var(--blue);color:var(--blue-ink);
+  transition:transform .18s var(--ease), opacity .18s var(--ease)
+}
+.btn b{font-weight:600;font-variant-numeric:tabular-nums}
+.btn.sec{background:var(--bg);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
+.btn:active:not(:disabled){transform:scale(.975)}
+.btn:disabled{opacity:.4;cursor:default}
+.btn.done{background:var(--green);color:#fff;justify-content:center}
+
+/* ---------- bills editor ---------- */
+.bill{border-bottom:1px solid var(--line)}
+.bill:last-child{border-bottom:0}
+.bill summary{display:flex;justify-content:space-between;align-items:center;gap:10px;
+  padding:15px 16px;cursor:pointer;font-size:15px;font-weight:500;list-style:none}
+.bill summary::-webkit-details-marker{display:none}
+.bill summary::after{content:"›";color:var(--dim);font-size:18px;
+  transition:transform .3s var(--ease);transform-origin:center}
+.bill[open] summary::after{transform:rotate(90deg)}
+.bill summary em{font-style:normal;font-size:10px;font-weight:700;color:var(--blue);
+  border:1px solid currentColor;border-radius:5px;padding:1px 5px;margin-left:6px;vertical-align:1px}
+.bill-total{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:600}
+.bill-total i{display:block;font-style:normal;font-size:11px;font-weight:400;color:var(--dim);
+  text-align:right}
+.bill-body{padding:2px 16px 16px}
+.erow{display:flex;justify-content:space-between;align-items:center;gap:12px;
+  padding:8px 0;border-top:1px solid var(--line)}
+.erow>span:first-child{text-transform:capitalize;color:var(--dim);font-size:14px}
+.erow.ed>span:first-child{color:var(--blue);font-weight:600}
+.inp{display:flex;align-items:center;gap:2px;color:var(--dim);font-size:15px}
+.inp input{
+  width:110px;padding:9px 11px;border:0;box-shadow:inset 0 0 0 1px var(--line);
+  border-radius:11px;background:var(--card2);color:var(--ink);font:inherit;font-size:16px;
+  text-align:right;font-variant-numeric:tabular-nums;-moz-appearance:textfield;
+  transition:box-shadow .2s var(--ease)
+}
+.inp input:focus{outline:0;box-shadow:inset 0 0 0 2px var(--blue)}
+.inp input::-webkit-outer-spin-button,.inp input::-webkit-inner-spin-button{
+  -webkit-appearance:none;margin:0}
+.row.split{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:14px;
+  padding-top:13px;border-top:1px solid var(--line)}
+.row.split span{text-align:center;font-size:11px;color:var(--dim)}
+.row.split b{display:block;font-size:15px;font-weight:600;color:var(--ink);
+  font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.hint{font-size:11px;color:var(--dim);margin-top:7px;text-transform:capitalize}
+
+/* ---------- schedule + log ---------- */
+.srow,.prow{display:flex;justify-content:space-between;gap:12px;padding:13px 16px;
+  border-bottom:1px solid var(--line);font-size:15px}
+.srow:last-child,.prow:last-child{border-bottom:0}
+.srow.past{opacity:.45}
+.srow.now{background:var(--card2)}
+.sdate,.prow>div:first-child{font-weight:500}
+.samt,.pamt{text-align:right;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.sdate i,.samt i,.prow i,.pamt i{display:block;font-style:normal;font-size:11px;
+  font-weight:400;color:var(--dim);letter-spacing:0}
+.prow.new{background:var(--green-bg)}
+.undo{border:0;box-shadow:inset 0 0 0 1px var(--line);background:transparent;color:var(--dim);
+  font:inherit;font-size:11px;padding:4px 9px;border-radius:8px;cursor:pointer;margin-top:4px}
+
+/* ---------- unsaved bar ---------- */
+.draftbar{display:none}
+.draftbar.on{
+  display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;
+  margin-top:14px;padding:14px 16px;border-radius:16px;background:var(--card);
+  box-shadow:var(--shadow), inset 3px 0 0 var(--blue);font-size:13px;line-height:1.45
+}
+.draftbar span{flex:1 1 200px;color:var(--dim)}
+.draftbar div{display:flex;gap:7px}
+.draftbar button{
+  border:0;background:var(--blue);color:#fff;font:inherit;font-size:13px;font-weight:500;
+  padding:9px 14px;border-radius:10px;cursor:pointer;transition:transform .18s var(--ease)
+}
+.draftbar button:active{transform:scale(.96)}
+.draftbar button.ghost{background:transparent;color:var(--dim);box-shadow:inset 0 0 0 1px var(--line)}
+
+/* ---------- identity sheet ---------- */
+.sheet{
+  position:fixed;inset:0;z-index:50;display:none;align-items:flex-end;justify-content:center;
+  background:rgba(0,0,0,.35);backdrop-filter:blur(3px);animation:fade .25s var(--ease)
+}
+.sheet.on{display:flex}
+.sheet-inner{
+  width:100%;max-width:440px;background:var(--card);border-radius:24px 24px 0 0;
+  padding:26px 20px calc(26px + env(safe-area-inset-bottom));
+  animation:rise .4s var(--ease)
+}
+@keyframes rise{from{transform:translateY(100%)}to{transform:none}}
+.sheet h3{margin:0 0 4px;font-size:21px;font-weight:600;letter-spacing:-.02em;text-align:center}
+.sheet p{margin:0 0 20px;font-size:14px;color:var(--dim);text-align:center}
+.pick{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pick button{
+  display:flex;align-items:center;gap:10px;border:0;box-shadow:inset 0 0 0 1px var(--line);
+  background:var(--card2);color:var(--ink);font:inherit;font-size:16px;font-weight:500;
+  padding:14px;border-radius:15px;cursor:pointer;transition:transform .18s var(--ease)
+}
+.pick button:active{transform:scale(.97)}
+.pick button.on{box-shadow:inset 0 0 0 2px var(--blue)}
+
+.note{font-size:12px;color:var(--dim);margin:16px 4px 0;line-height:1.55}
+code{background:color-mix(in srgb,var(--dim) 18%,transparent);padding:1px 5px;
+  border-radius:5px;font-size:11px}
+
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ---------------------------------------------------------
+   Desktop — wider canvas, side-by-side columns, denser rows
+   --------------------------------------------------------- */
+@media (min-width:820px){
+  body{font-size:16px;padding-bottom:60px}
+  .wrap{max-width:1080px;padding:0 32px 72px}
+  .topbar{padding:16px 32px;margin:0 -32px 8px}
+  .brand{font-size:19px}
+
+  .hero{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:28px;
+    text-align:left;padding:24px 30px}
+  .hero .big{font-size:34px;margin:4px 0 0}
+  .hero .det{margin:0;padding:0 0 0 28px;border-top:0;border-left:1px solid var(--line);
+    max-width:280px}
+
+  #cards{grid-template-columns:repeat(4,1fr);gap:14px}
+  .card{padding:16px 18px}
+  .card-amt{font-size:27px}
+
+  .tabs{max-width:440px;margin:30px 0 18px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:26px;align-items:start}
+  .two h2:first-child{margin-top:0}
+  #pay-actions{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+  #pay-actions .act{margin-bottom:0}
+  .act-btns{grid-template-columns:1fr 1fr}
+  .act-btns .btn.wide{grid-column:1/-1}
+  .sheet{align-items:center}
+  .sheet-inner{border-radius:24px;padding:30px}
+}
