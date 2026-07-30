@@ -19,6 +19,10 @@ export const DUE_DAY = 28;
    so people can pay early without the site calling them overpaid. */
 export const OWED_LEAD_DAYS = 7;
 
+/* The pay window stays open until this day of the FOLLOWING month
+   (due the 28th → payable through the 7th of the next month). */
+export const PAY_UNTIL_DAY = 7;
+
 /* Rent is for the month ahead; utilities are for the month just ending.
    So on the 28th of July you pay AUGUST rent + JULY utilities. */
 export const UTILITY_MONTHS_BEHIND_RENT = 1;

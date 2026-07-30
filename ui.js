@@ -3,7 +3,7 @@
    All the money logic lives in app.js.
    ============================================================ */
 import {
-  PEOPLE, BILLS, BILLS_FILE, PAYMENTS, BILL_PAYERS, OWED_LEAD_DAYS, KINDS,
+  PEOPLE, BILLS, BILLS_FILE, PAYMENTS, BILL_PAYERS, OWED_LEAD_DAYS, PAY_UNTIL_DAY, KINDS,
   draft, setDraft, mergeBills, DRAFT_KEY, saveDraft,
   payDraft, setPayDraft, savePayDraft,
   money, r2, monthLabel, dateLabel, TODAY,
@@ -134,31 +134,41 @@ export function render() {
 
   /* ---- PAY: the two outside bills ---- */
   const who = ME || PEOPLE[0];
-  const per = nextRow ? nextRow.per
+
+  /* The payable cycle: window runs from OWED_LEAD_DAYS before the due date
+     through the PAY_UNTIL_DAY of the following month (28th → next 7th). */
+  const winStart = (r) => {
+    const d = new Date(r.dueDate);
+    d.setDate(d.getDate() - OWED_LEAD_DAYS);
+    return d;
+  };
+  const winEnd = (r) =>
+    new Date(r.dueDate.getFullYear(), r.dueDate.getMonth() + 1, PAY_UNTIL_DAY, 23, 59, 59);
+  const payRow = schedule.find((r) => TODAY >= winStart(r) && TODAY <= winEnd(r)) || nextRow;
+
+  const per = payRow ? payRow.per
     : Object.fromEntries(PEOPLE.map((p) => [p, { rent: 0, util: 0, water: 0, other: 0 }]));
 
   const groups = [
     {
       title: "Rent + water", to: "Landlord", payer: BILL_PAYERS.rentWater,
-      sub: nextRow?.rentMonth
-        ? `${monthLabel(nextRow.rentMonth)} rent${
-            nextRow.utilMonth ? ` · ${monthLabel(nextRow.utilMonth)} water` : ""}`
+      sub: payRow?.rentMonth
+        ? `${monthLabel(payRow.rentMonth)} rent${
+            payRow.utilMonth ? ` · ${monthLabel(payRow.utilMonth)} water` : ""}`
         : "nothing due",
       per: Object.fromEntries(PEOPLE.map((p) => [p, r2(per[p].rent + per[p].water)])),
     },
     {
       title: "Other utilities", to: "Utility co", payer: BILL_PAYERS.otherUtilities,
-      sub: `wifi · gas · electric${nextRow?.utilMonth ? ` — ${monthLabel(nextRow.utilMonth)}` : ""}`,
+      sub: `wifi · gas · electric${payRow?.utilMonth ? ` — ${monthLabel(payRow.utilMonth)}` : ""}`,
       per: Object.fromEntries(PEOPLE.map((p) => [p, r2(per[p].other)])),
     },
   ];
 
-  /* The pay window opens OWED_LEAD_DAYS before the due date. Once the
-     whole-house payment is logged for this cycle, the button hides
-     until the next window opens. */
-  const cycleStart = nextRow ? new Date(nextRow.dueDate) : null;
-  if (cycleStart) cycleStart.setDate(cycleStart.getDate() - OWED_LEAD_DAYS);
-  const windowOpen = !!nextRow?.isDue;
+  /* Once the whole-house payment is logged for this cycle, the button
+     hides until the next window opens. */
+  const cycleStart = payRow ? winStart(payRow) : null;
+  const windowOpen = !!payRow && TODAY >= winStart(payRow) && TODAY <= winEnd(payRow);
   const isCyclePay = (g) => (p) =>
     p.covers && p.to === g.to && new Date(p.date + "T00:00:00") >= cycleStart;
   const paidThisCycle = (g) =>

@@ -1,7 +1,7 @@
 import {
   PEOPLE, RENT, RENT_FIRST_MONTH, RENT_LAST_MONTH, DUE_DAY, OWED_LEAD_DAYS,
   UTILITY_MONTHS_BEHIND_RENT, BILLS as BILLS_FILE, WATER_FIXED_MONTHS, PAYMENTS,
-  BILL_PAYERS,
+  BILL_PAYERS, PAY_UNTIL_DAY,
 } from "./data.js";
 
 /* Local unsaved edits to the bills, layered on top of data.js.
@@ -257,7 +257,7 @@ function computeBalances(schedule) {
 /* ---------- shared with ui.js ---------- */
 export const KINDS = ["wifi", "gas", "electric", "water"];
 export {
-  PEOPLE, BILLS, BILLS_FILE, PAYMENTS, BILL_PAYERS, OWED_LEAD_DAYS,
+  PEOPLE, BILLS, BILLS_FILE, PAYMENTS, BILL_PAYERS, OWED_LEAD_DAYS, PAY_UNTIL_DAY,
   draft, DRAFT_KEY, mergeBills, saveDraft,
   payDraft, savePayDraft,
   money, r2, monthLabel, dateLabel, TODAY,
