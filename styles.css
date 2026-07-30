@@ -267,6 +267,11 @@ h2.tight{margin-top:18px}
 .credit{font-size:12px;color:var(--dim);text-align:center;margin:34px 0 0;
   letter-spacing:.02em;opacity:.8}
 
+/* math / explainer tab */
+.mathbox p{margin:0 0 12px;font-size:14px;line-height:1.55;color:var(--ink)}
+.mathbox p:last-child{margin-bottom:0}
+.mathbox b{font-weight:600}
+
 /* plain admin panel — deliberately unstyled-looking */
 .admin{margin-top:22px;font-size:13px;color:var(--dim)}
 .admin summary{cursor:pointer;text-align:center;opacity:.7}

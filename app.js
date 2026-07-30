@@ -250,14 +250,15 @@ function computeBalances(schedule) {
     };
   });
 
-  return { balances, moves };
+  return { balances, moves, iou };
 }
 
 
 /* ---------- shared with ui.js ---------- */
 export const KINDS = ["wifi", "gas", "electric", "water"];
 export {
-  PEOPLE, BILLS, BILLS_FILE, PAYMENTS, BILL_PAYERS, OWED_LEAD_DAYS, PAY_UNTIL_DAY,
+  PEOPLE, RENT, DUE_DAY,
+  BILLS, BILLS_FILE, PAYMENTS, BILL_PAYERS, OWED_LEAD_DAYS, PAY_UNTIL_DAY,
   draft, DRAFT_KEY, mergeBills, saveDraft,
   payDraft, savePayDraft,
   money, r2, monthLabel, dateLabel, TODAY,

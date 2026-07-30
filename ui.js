@@ -3,7 +3,8 @@
    All the money logic lives in app.js.
    ============================================================ */
 import {
-  PEOPLE, BILLS, BILLS_FILE, PAYMENTS, BILL_PAYERS, OWED_LEAD_DAYS, PAY_UNTIL_DAY, KINDS,
+  PEOPLE, RENT, DUE_DAY,
+  BILLS, BILLS_FILE, PAYMENTS, BILL_PAYERS, OWED_LEAD_DAYS, PAY_UNTIL_DAY, KINDS,
   draft, setDraft, mergeBills, DRAFT_KEY, saveDraft,
   payDraft, setPayDraft, savePayDraft,
   money, r2, monthLabel, dateLabel, TODAY,
@@ -74,7 +75,7 @@ function wirePayButtons(root) {
 /* ---------- render ---------- */
 export function render() {
   const schedule = buildSchedule();
-  const { balances, moves } = computeBalances(schedule);
+  const { balances, moves, iou } = computeBalances(schedule);
   const bal = Object.fromEntries(balances.map((b) => [b.name, b]));
   const nextRow = schedule.find((r) => r.dueDate >= TODAY);
 
@@ -367,6 +368,86 @@ export function render() {
                   money(x.other)}</div>`;
       }).join("")
     : `<div class="empty">Nothing upcoming.</div>`;
+
+  /* ---- MATH: every number, explained, always current ---- */
+  const dueSoFar = schedule.filter((r) => r.isDue);
+  const pairNet = (a, b) => r2((iou[a]?.[b] || 0) - (iou[b]?.[a] || 0));
+  const allPays = [...PAYMENTS, ...payDraft];
+
+  const payEffect = (p) => {
+    if (isPerson(p.to)) return `pays ${p.to} back — shrinks what ${p.by} owes ${p.to}`;
+    if (p.covers) {
+      const others = Object.keys(p.covers).filter((x) => x !== p.by);
+      return `covers everyone's share — ${others.map((x) =>
+        `${x} now owes ${p.by} ${money(p.covers[x])}`).join(", ")}`;
+    }
+    return `counts toward ${p.by}'s own share`;
+  };
+
+  el("math").innerHTML = `
+    <h2 class="tight">The rules</h2>
+    <div class="box mathbox">
+      <p><b>Due dates.</b> Everything falls due on the ${DUE_DAY}th. On it you owe
+        <b>next month's rent</b> plus <b>last month's utilities</b> (bills arrive a month behind).
+        The money starts counting ${OWED_LEAD_DAYS} days before the ${DUE_DAY}th, and the pay
+        buttons stay open until the ${PAY_UNTIL_DAY}th of the next month.</p>
+      <p><b>Rent.</b> ${PEOPLE.map((p) => `${p} ${money(RENT[p])}`).join(" · ")} per month.</p>
+      <p><b>Utilities.</b> Every bill splits evenly ${PEOPLE.length} ways.</p>
+      <p><b>Fronting.</b> ${BILL_PAYERS.rentWater} pays the landlord (rent + water);
+        ${BILL_PAYERS.otherUtilities} pays the utility company (wifi · gas · electric).
+        When they do, everyone else's share instantly becomes a debt to them.</p>
+      <p><b>Settling.</b> Debts are netted so everyone makes at most one payment —
+        if you owe someone who owes someone else, you pay the end of the chain directly
+        and the middle person pays less.</p>
+    </div>
+
+    <h2>What's been owed so far</h2>
+    <div class="box">
+      ${dueSoFar.length ? dueSoFar.map((r) => `
+        <div class="move"><span style="font-weight:500">${dateLabel(r.dueDate)}</span>
+          <span>${money(r.total)}</span></div>
+        <div class="sub">${[
+          r.rentMonth ? `${monthLabel(r.rentMonth)} rent` : null,
+          r.utilMonth ? `${monthLabel(r.utilMonth)} utilities` : null,
+        ].filter(Boolean).join(" + ")} — ${PEOPLE.map((p) =>
+          `${p} ${money(r.per[p].rent + r.per[p].util)}`).join(" · ")}</div>`).join("")
+      : `<div class="empty">Nothing has come due yet.</div>`}
+    </div>
+
+    <h2>Every payment and what it did</h2>
+    <div class="box">
+      ${allPays.length ? allPays.map((p) => `
+        <div class="move"><span style="font-weight:400"><b>${p.by}</b> → ${
+          isPerson(p.to) ? p.to : p.to.toLowerCase()}</span><span>${money(p.amount)}</span></div>
+        <div class="sub">${payEffect(p)}</div>`).join("")
+      : `<div class="empty">No payments logged yet.</div>`}
+    </div>
+
+    <h2>Each person's balance</h2>
+    ${balances.map((b) => {
+      const owesTo = PEOPLE.filter((q) => q !== b.name && pairNet(b.name, q) > 0.005)
+        .map((q) => `owes ${q} ${money(pairNet(b.name, q))}`);
+      const owedBy = PEOPLE.filter((q) => q !== b.name && pairNet(q, b.name) > 0.005)
+        .map((q) => `${q} owes them ${money(pairNet(q, b.name))}`);
+      return `<div class="box" style="margin-bottom:10px">
+        <div class="move"><span style="font-weight:600">${b.name}</span>
+          <span>${b.out > 0.005 ? "owes " + money(b.out)
+            : b.out < -0.005 ? "is owed " + money(-b.out) : "all square"}</span></div>
+        <div class="sub">accrued ${money(b.owed)} − paid out ${money(b.paid)} = ${money(b.outside)} to the outside${
+          owesTo.length ? " · " + owesTo.join(", ") : ""}${
+          owedBy.length ? " · " + owedBy.join(", ") : ""}</div>
+      </div>`;
+    }).join("")}
+
+    <h2>Who pays whom right now</h2>
+    <div class="box">
+      ${moves.length ? moves.map((m) => `
+        <div class="move"><span style="font-weight:400"><b>${m.from}</b> pays <b>${m.to}</b></span>
+          <span>${money(m.amt)}</span></div>`).join("")
+      : `<div class="empty">Everyone's square 🎉</div>`}
+      <div class="sub" style="margin-top:8px">Computed by netting every debt above into one
+        payment per person (minimum cash flow). Updates the moment anyone logs a payment.</div>
+    </div>`;
 }
 
 /* ---------- paste-ready snippets for data.js ---------- */
