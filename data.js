@@ -10,7 +10,7 @@ export const PEOPLE = ["Aidan", "Brandon", "Simon", "Spence"];
    authorized JavaScript origin = your vercel.app URL). Leave "" to disable
    sign-in. The same value must also be set as the GOOGLE_CLIENT_ID
    environment variable on Vercel. */
-export const GOOGLE_CLIENT_ID = 41680497963-7vpavv2ne7n3epknj8pcjdecbogohn72.apps.googleusercontent.com;
+export const GOOGLE_CLIENT_ID = "41680497963-7vpavv2ne7n3epknj8pcjdecbogohn72.apps.googleusercontent.com";
 
 /* Monthly rent (incl. insurance) per person, for the lease term below. */
 export const RENT = { Aidan: 985, Brandon: 835, Simon: 785, Spence: 815 };
