@@ -267,6 +267,24 @@ h2.tight{margin-top:18px}
 .credit{font-size:12px;color:var(--dim);text-align:center;margin:34px 0 0;
   letter-spacing:.02em;opacity:.8}
 
+/* sign-in gate */
+.gate{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;
+  background:var(--bg);padding:24px}
+.gate.on{display:flex}
+.gate-card{max-width:340px;width:100%;text-align:center;background:var(--card);
+  border-radius:var(--radius);box-shadow:var(--shadow);padding:34px 26px}
+.gate-emoji{font-size:40px}
+.gate-card h2{margin:10px 0 6px;font-size:20px;letter-spacing:-.02em}
+.gate-card p{margin:0 0 20px;font-size:14px;color:var(--dim)}
+.gate-card #g-signin{display:flex;justify-content:center}
+.gate-msg{margin-top:16px !important;min-height:18px;color:var(--red) !important}
+
+/* whitelist admin */
+.wl-add{display:flex;gap:6px;margin-top:8px}
+.wl-add input,.wl-add select{flex:1;min-width:0;font:inherit;font-size:13px;padding:6px 8px;
+  border:1px solid var(--line);border-radius:7px;background:var(--card);color:var(--ink)}
+.wl-add button{color:var(--green)}
+
 /* math / explainer tab — spare, Splitwise-ish */
 .mrule{display:flex;gap:12px;align-items:baseline;padding:13px 16px;
   font-size:14px;line-height:1.5;color:var(--ink);border-bottom:1px solid var(--line)}

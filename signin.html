@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sign in — House</title>
+<link rel="stylesheet" href="./styles.css">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+<div class="gate on">
+  <div class="gate-card">
+    <div class="gate-emoji">🏠</div>
+    <h2>House — Rent &amp; Utilities</h2>
+    <p>Sign in with the email that's on the house list.</p>
+    <div id="g-signin"></div>
+    <p class="gate-msg" id="msg"></p>
+  </div>
+</div>
+<script>
+  const msg = (t) => (document.getElementById("msg").textContent = t);
+
+  async function boot() {
+    let clientId = "";
+    try {
+      const r = await fetch("/api/auth?config=1");
+      clientId = (await r.json()).clientId || "";
+    } catch {}
+    if (!clientId) { msg("Sign-in isn't configured yet."); return; }
+    if (!window.google?.accounts?.id) { setTimeout(boot, 250); return; }
+    google.accounts.id.initialize({ client_id: clientId, callback: onGoogle });
+    google.accounts.id.renderButton(document.getElementById("g-signin"),
+      { theme: "outline", size: "large", width: 260 });
+  }
+
+  async function onGoogle(resp) {
+    try {
+      const r = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ credential: resp.credential }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        msg(r.status === 403
+          ? `${d.email || "That email"} isn't on the house list — ask a roommate to add you.`
+          : "Sign-in failed — try again.");
+        return;
+      }
+      /* cookie lets the middleware serve pages; localStorage feeds the API calls */
+      document.cookie = `rt_sess=${d.token}; Path=/; Max-Age=5184000; SameSite=Lax; Secure`;
+      localStorage.setItem("rent-tracker-auth",
+        JSON.stringify({ token: d.token, email: d.email, person: d.person }));
+      if (d.person) localStorage.setItem("rent-tracker-me", d.person);
+      location.replace("/");
+    } catch { msg("Sign-in failed — try again."); }
+  }
+  boot();
+</script>
+</body>
+</html>

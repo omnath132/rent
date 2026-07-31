@@ -9,8 +9,9 @@ import {
   payDraft, setPayDraft, savePayDraft,
   money, r2, monthLabel, dateLabel, TODAY,
   utilitiesFor, buildSchedule, computeBalances, isPerson,
-  initStore, storeMode,
+  initStore, storeMode, needAuth, auth, setAuth,
 } from "./app.js";
+import { GOOGLE_CLIENT_ID } from "./data.js";
 
 const el = (id) => document.getElementById(id);
 
@@ -20,6 +21,54 @@ let SESSION0 = { draft: {}, pay: [] };
 const sessionDirty = () =>
   JSON.stringify(draft) !== JSON.stringify(SESSION0.draft) ||
   JSON.stringify(payDraft) !== JSON.stringify(SESSION0.pay);
+
+/* ---------- Google sign-in gate ---------- */
+let ACL = null;                     // whitelist, once known
+
+function showGate(msg) {
+  el("gate").classList.add("on");
+  el("gate-msg").textContent = msg || "";
+  if (!GOOGLE_CLIENT_ID || !window.google?.accounts?.id) {
+    if (!GOOGLE_CLIENT_ID) el("gate-msg").textContent = "Sign-in isn't configured yet.";
+    else setTimeout(() => showGate(msg), 300);   // GIS script still loading
+    return;
+  }
+  google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onGoogle });
+  google.accounts.id.renderButton(el("g-signin"), { theme: "outline", size: "large", width: 260 });
+}
+
+async function onGoogle(resp) {
+  try {
+    const r = await fetch("/api/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ credential: resp.credential }),
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      el("gate-msg").textContent = r.status === 403
+        ? `${d.email || "That email"} isn't on the house list — ask a roommate to add you.`
+        : "Sign-in failed — try again.";
+      return;
+    }
+    setAuth({ token: d.token, email: d.email, person: d.person });
+    document.cookie = `rt_sess=${d.token}; Path=/; Max-Age=5184000; SameSite=Lax; Secure`;
+    ACL = d.acl || null;
+    if (isPerson(d.person)) setMe(d.person);     // e.g. skaplins → Simon
+    el("gate").classList.remove("on");
+    initStore().then(render);
+  } catch {
+    el("gate-msg").textContent = "Sign-in failed — try again.";
+  }
+}
+
+async function loadAcl() {
+  if (!auth()?.token) return;
+  try {
+    const r = await fetch("/api/auth", { headers: { Authorization: `Bearer ${auth().token}` } });
+    if (r.ok) { ACL = (await r.json()).acl; render(); }
+  } catch {}
+}
 
 /* ---------- who am I ---------- */
 const ME_KEY = "rent-tracker-me";
@@ -264,12 +313,21 @@ export function render() {
   el("draft-bar").className =
     storeMode() === "local" && Object.keys(draft).length ? "draftbar on" : "draftbar";
 
+  /* a bill month locks once its grace window closes:
+     July's bills stay editable through Aug ${PAY_UNTIL_DAY}. */
+  const billLocked = (mk) => {
+    const end = new Date(+mk.slice(0, 4), +mk.slice(5, 7), PAY_UNTIL_DAY, 23, 59, 59);
+    return end < TODAY;
+  };
+
   el("bills").innerHTML = months.map((mk) => {
     const u = utilitiesFor(mk);
     const missing = KINDS.filter((k) => (BILLS[mk] || {})[k] == null);
     const edited = draft[mk] || {};
+    const locked = billLocked(mk);
     return `<details class="bill" data-mk="${mk}" ${openNow.has(mk) ? "open" : ""}>
-      <summary><span>${monthLabel(mk)}${Object.keys(edited).length ? "<em>edited</em>" : ""}</span>
+      <summary><span>${monthLabel(mk)}${locked ? "<em>🔒</em>"
+          : Object.keys(edited).length ? "<em>edited</em>" : ""}</span>
         <span class="bill-total num">${u.hasAny ? money(u.total) : "—"}${
           missing.length ? `<i>${missing.length} not billed</i>` : ""}</span></summary>
       <div class="bill-body">
@@ -278,7 +336,8 @@ export function render() {
           return `<label class="erow${edited[k] !== undefined ? " ed" : ""}">
             <span>${k}</span>
             <span class="inp">$<input type="number" inputmode="decimal" step="0.01" min="0"
-              placeholder="—" value="${v == null ? "" : v}" data-mk="${mk}" data-kind="${k}"></span>
+              placeholder="—" value="${v == null ? "" : v}" data-mk="${mk}" data-kind="${k}"
+              ${locked ? "disabled" : ""}></span>
           </label>`;
         }).join("")}
         ${u.hasAny ? `<div class="row split">${PEOPLE.map((p) =>
@@ -353,6 +412,31 @@ export function render() {
       render();
     };
   });
+
+  /* ---- admin: whitelist (only when signed in) ---- */
+  el("admin-wl").style.display = auth() && ACL ? "" : "none";
+  if (auth() && ACL) {
+    el("wl-list").innerHTML = Object.entries(ACL).map(([em, person]) => `
+      <div class="arow${em === "skaplins@andrew.cmu.edu" ? " locked" : ""}">
+        <span>${em} → ${person}</span>
+        <span>${em === "skaplins@andrew.cmu.edu" ? "owner"
+          : `<button class="wl-del" data-em="${em}">remove</button>`}</span>
+      </div>`).join("");
+    if (!el("wl-person").options.length) {
+      el("wl-person").innerHTML = PEOPLE.map((p) => `<option>${p}</option>`).join("");
+    }
+    el("wl-list").querySelectorAll(".wl-del").forEach((b) => {
+      b.onclick = async () => {
+        if (!confirm(`Remove ${b.dataset.em} from the whitelist?`)) return;
+        const r = await fetch("/api/auth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${auth().token}` },
+          body: JSON.stringify({ action: "unwhitelist", email: b.dataset.em }),
+        });
+        if (r.ok) { ACL = (await r.json()).acl; render(); }
+      };
+    });
+  }
 
   el("settle").innerHTML = moves.length
     ? moves.map((m) => `<div class="move"><span style="font-weight:400"><b>${m.from}</b> pays
@@ -466,6 +550,29 @@ el("admin-clear-pays").onclick = () => {
   render();
 };
 
+/* ---------- whitelist add + sign out ---------- */
+el("wl-add-btn").onclick = async () => {
+  const email = el("wl-email").value.trim();
+  const person = el("wl-person").value;
+  if (!email) return;
+  const r = await fetch("/api/auth", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${auth().token}` },
+    body: JSON.stringify({ action: "whitelist", email, person }),
+  });
+  const d = await r.json();
+  if (!r.ok) { alert(d.error || "Couldn't add"); return; }
+  ACL = d.acl;
+  el("wl-email").value = "";
+  render();
+};
+el("wl-signout").onclick = () => {
+  if (!confirm("Sign out on this device?")) return;
+  setAuth(null);
+  document.cookie = "rt_sess=; Path=/; Max-Age=0";
+  location.reload();
+};
+
 /* ---------- tabs + sticky header ---------- */
 document.querySelectorAll(".tab").forEach((t) => {
   t.onclick = () => {
@@ -513,7 +620,10 @@ themeIcon();
 /* ---------- boot: load shared state (if the server store exists), then render ---------- */
 initStore().then(() => {
   SESSION0 = { draft: clone(draft), pay: clone(payDraft) };
+  if (needAuth()) { showGate(); return; }
+  el("gate").classList.remove("on");
   render();
+  if (auth()) loadAcl();               // whitelist for the admin panel
 });
 
 /* keep devices in sync: refetch when the tab regains focus, when the page is
@@ -522,7 +632,7 @@ const resync = () => {
   if (storeMode() !== "server" || document.hidden) return;
   /* don't yank the keyboard away mid-edit */
   if (document.activeElement?.tagName === "INPUT") return;
-  initStore().then(render);
+  initStore().then(() => { if (needAuth()) showGate(); else render(); });
 };
 document.addEventListener("visibilitychange", resync);
 window.addEventListener("pageshow", (e) => { if (e.persisted) resync(); });

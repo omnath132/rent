@@ -15,6 +15,18 @@ module.exports = async function handler(req, res) {
   }
   const headers = { Authorization: `Bearer ${token}` };
 
+  /* When Google auth is configured, every request needs a valid session. */
+  if (process.env.GOOGLE_CLIENT_ID) {
+    const m = /^Bearer (.+)$/.exec(req.headers.authorization || "");
+    let email = null;
+    if (m) {
+      const r = await fetch(`${base}/get/${encodeURIComponent("rent-tracker-sess:" + m[1])}`,
+        { headers });
+      email = (await r.json()).result ?? null;
+    }
+    if (!email) return res.status(401).json({ error: "sign in required" });
+  }
+
   if (req.method === "GET") {
     const r = await fetch(`${base}/get/${KEY}`, { headers });
     const j = await r.json();

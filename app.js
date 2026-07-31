@@ -30,6 +30,20 @@ const allPayments = () => [...PAYMENTS, ...payDraft];
 let MODE = "local";
 export const storeMode = () => MODE;
 
+/* ---------- Google sign-in session ---------- */
+const AUTH_KEY = "rent-tracker-auth";
+let AUTH = (() => { try { return JSON.parse(localStorage.getItem(AUTH_KEY)); } catch { return null; } })();
+let NEED_AUTH = false;                       // server said 401 — must sign in
+export const needAuth = () => NEED_AUTH;
+export const auth = () => AUTH;
+export function setAuth(a) {
+  AUTH = a;
+  if (a) localStorage.setItem(AUTH_KEY, JSON.stringify(a));
+  else localStorage.removeItem(AUTH_KEY);
+}
+const authHeaders = () =>
+  AUTH?.token ? { Authorization: `Bearer ${AUTH.token}` } : {};
+
 let pushTimer = null;
 function pushServer() {
   clearTimeout(pushTimer);
@@ -37,7 +51,7 @@ function pushServer() {
     pushTimer = null;
     fetch("/api/data", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({ bills: draft, payments: payDraft }),
     }).catch(() => {});
   }, 300);
@@ -57,8 +71,15 @@ export async function initStore() {
     /* cache-busted + no-store so a reload always gets the latest state */
     const r = await fetch(`/api/data?t=${Date.now()}`, {
       cache: "no-store",
+      headers: authHeaders(),
       signal: AbortSignal.timeout(4000),
     });
+    if (r.status === 401) {           // server exists but wants a sign-in
+      MODE = "server";
+      NEED_AUTH = true;
+      return MODE;
+    }
+    NEED_AUTH = false;
     if (r.ok) {
       const d = await r.json();
       if (d && typeof d.bills === "object" && d.bills !== null && Array.isArray(d.payments)) {

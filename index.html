@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>House — Rent &amp; Utilities</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏠</text></svg>">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
   /* apply the saved theme before first paint so there's no flash */
   (function () {
@@ -121,10 +122,31 @@
     <div id="admin-list"></div>
     <button id="admin-clear-bills">Clear all bill edits</button>
     <button id="admin-clear-pays">Delete ALL logged payments</button>
+    <div id="admin-wl" style="display:none">
+      <div style="margin:14px 0 6px">Whitelist — who can sign in, and who they count as</div>
+      <div id="wl-list"></div>
+      <div class="wl-add">
+        <input type="email" id="wl-email" placeholder="email@example.com">
+        <select id="wl-person"></select>
+        <button id="wl-add-btn">Add</button>
+      </div>
+      <button id="wl-signout" style="margin-top:10px">Sign out on this device</button>
+    </div>
   </details>
 </div>
 
 <!-- identity picker -->
+<!-- sign-in gate: covers the app until Google auth passes (only when enabled) -->
+<div class="gate" id="gate">
+  <div class="gate-card">
+    <div class="gate-emoji">🏠</div>
+    <h2>House — Rent &amp; Utilities</h2>
+    <p>Sign in with the email that's on the house list.</p>
+    <div id="g-signin"></div>
+    <p class="gate-msg" id="gate-msg"></p>
+  </div>
+</div>
+
 <div class="sheet" id="sheet">
   <div class="sheet-inner">
     <h3>Who are you?</h3>
